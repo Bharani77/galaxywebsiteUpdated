@@ -9,11 +9,11 @@
     "lint": "next lint"
   },
   "dependencies": {
-    "@supabase/supabase-js": "^2.47.10",
+    "@supabase/supabase-js": "^2.48.1",
     "next": "15.0.3",
     "react": "19.0.0-rc-66855b96-20241106",
     "react-dom": "19.0.0-rc-66855b96-20241106",
-    "react-toastify": "^11.0.2"
+    "react-toastify": "^11.0.3"
   },
   "devDependencies": {
     "@types/node": "^20",

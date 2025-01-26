@@ -1,8 +1,10 @@
 "use client";
 
-import { useSearchParams } from "next/navigation";
+import { useSearchParams, useRouter } from "next/navigation";
 import React, { Suspense, useEffect } from "react";
 import { createClient } from "@supabase/supabase-js";
+import { ToastContainer, toast } from 'react-toastify';
+import 'react-toastify/dist/ReactToastify.css';
 
 // Initialize Supabase client
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
@@ -11,6 +13,7 @@ const supabase = createClient(supabaseUrl!, supabaseAnonKey!);
 
 function ProfileContent() {
     const searchParams = useSearchParams();
+    const router = useRouter();
     const username = searchParams.get("username");
 
     const validateSession = async () => {
@@ -18,9 +21,27 @@ function ProfileContent() {
         const sessionId = sessionStorage.getItem("sessionId");
 
         if (!userId || !sessionId) {
-            // No session data found, redirect to sign-in
-            sessionStorage.clear();
-            window.location.href = "/signin";
+            // Check if there's an active session in DB
+            const { data: user, error } = await supabase
+                .from("users")
+                .select("active_session_id")
+                .eq("username", username)
+                .single();
+
+            if (user && user.active_session_id) {
+                // Active session exists in another tab
+                await supabase.rpc('terminate_session', { user_id: user.id });
+                sessionStorage.clear();
+                toast.error('Duplicate session detected. Multiple tabs are not allowed.', {
+                    onClose: () => router.push('/signin')
+                });
+            } else {
+                // No active session anywhere
+                sessionStorage.clear();
+                toast.warning('Session expired. Please sign in again.', {
+                    onClose: () => router.push('/signin')
+                });
+            }
             return;
         }
 
@@ -34,11 +55,16 @@ function ProfileContent() {
         if (error || !user || user.active_session_id !== sessionId) {
             // Session is no longer valid, terminate it
             sessionStorage.clear();
-            window.location.href = "/";
+            toast.error('Session invalid. Please sign in again.', {
+                onClose: () => router.push('/signin')
+            });
         }
     };
 
     useEffect(() => {
+        // Initial session validation
+        validateSession();
+
         // Validate session every 10 seconds
         const interval = setInterval(validateSession, 10000);
 
@@ -53,7 +79,9 @@ function ProfileContent() {
                     (payload) => {
                         if (payload.userId === parseInt(userId)) {
                             sessionStorage.clear();
-                            window.location.href = "/";
+                            toast.error('Your session was terminated.', {
+                                onClose: () => router.push('/signin')
+                            });
                         }
                     }
                 )
@@ -66,25 +94,43 @@ function ProfileContent() {
         } else {
             clearInterval(interval);
         }
-    }, []);
+    }, [router, username]);
 
     return (
-        <div className="min-h-screen bg-gray-900 text-white flex flex-col items-center justify-center">
-            <div className="text-4xl font-bold mb-4">
-                Hello,{" "}
-                <span className="text-purple-500">
-                    {username ? username : "Guest"}
-                </span>
-                !
+        <div className="min-h-screen bg-gradient-to-b from-gray-900 via-purple-900 to-violet-600 flex flex-col items-center justify-center p-4">
+            <ToastContainer
+                position="top-right"
+                autoClose={3000}
+                hideProgressBar={false}
+                newestOnTop={false}
+                closeOnClick
+                rtl={false}
+                pauseOnFocusLoss
+                draggable
+                pauseOnHover
+                theme="light"
+            />
+            <div className="bg-white/10 backdrop-blur-lg rounded-xl p-8 shadow-lg max-w-md w-full">
+                <h1 className="text-2xl font-bold text-white mb-4">
+                    Hello,{" "}
+                    <span className="text-purple-300">
+                        {username ? username : "Guest"}
+                    </span>
+                    !
+                </h1>
+                {/* Add other content or components here */}
             </div>
-            {/* Add other content or components here */}
         </div>
     );
 }
 
 export default function ProfilePage() {
     return (
-        <Suspense fallback={<div>Loading...</div>}>
+        <Suspense fallback={
+            <div className="min-h-screen bg-gradient-to-b from-gray-900 via-purple-900 to-violet-600 flex items-center justify-center">
+                <div className="text-white text-xl">Loading...</div>
+            </div>
+        }>
             <ProfileContent />
         </Suspense>
     );
