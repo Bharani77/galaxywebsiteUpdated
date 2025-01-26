@@ -4,12 +4,10 @@ import React, { useState, useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@supabase/supabase-js";
 
-// Initialize Supabase client
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
 const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
 const supabase = createClient(supabaseUrl!, supabaseAnonKey!);
 
-// Constants for session management
 const STORAGE_KEYS = {
     SESSION_TOKEN: 'sessionToken',
     USER_ID: 'userId',
@@ -47,13 +45,11 @@ export default function SignInPage() {
             const userId = sessionStorage.getItem(STORAGE_KEYS.USER_ID);
             if (userId) {
                 console.log("Terminating session for user:", userId);
-                // Clear session storage first
                 Object.values(STORAGE_KEYS).forEach(key => {
                     sessionStorage.removeItem(key);
                     console.log("Removed key from session storage:", key);
                 });
 
-                // Then update database
                 await supabase
                     .from("users")
                     .update({
@@ -73,7 +69,6 @@ export default function SignInPage() {
 
     useEffect(() => {
         const setupSessionManagement = async () => {
-            // Subscribe to session termination events
             const userId = sessionStorage.getItem(STORAGE_KEYS.USER_ID);
             if (userId) {
                 sessionChannel.current = supabase
@@ -106,19 +101,16 @@ export default function SignInPage() {
         setIsLoading(true);
 
         try {
-            // Validate input fields
             if (!username.trim() || !password.trim()) {
                 showToast("Please enter both username and password");
                 setIsLoading(false);
                 return;
             }
 
-            // Ensure Supabase is initialized
             if (!supabase) {
                 throw new Error("Supabase client is not initialized.");
             }
 
-            // Find user and validate credentials
             const { data: user, error: userError } = await supabase
                 .from("users")
                 .select("*")
@@ -137,14 +129,12 @@ export default function SignInPage() {
                 return;
             }
 
-            // Generate new session
             const newSessionToken = generateSessionToken();
             const newSessionId = generateSessionId();
 
             console.log("Creating new session for user:", user.id);
             console.log("New session ID:", newSessionId);
 
-            // Terminate any existing session
             if (user.active_session_id) {
                 console.log("Terminating existing session for user:", user.id);
                 const { error: terminateError } = await supabase
@@ -160,7 +150,6 @@ export default function SignInPage() {
                     throw new Error("Failed to terminate existing session.");
                 }
 
-                // Broadcast session termination
                 await supabase
                     .channel('session_updates')
                     .send({
@@ -171,11 +160,9 @@ export default function SignInPage() {
 
                 console.log("Broadcasted session termination for user:", user.id);
 
-                // Wait to ensure broadcast is received
                 await new Promise(resolve => setTimeout(resolve, 1000));
             }
 
-            // Create new session
             const { error: updateError } = await supabase
                 .from("users")
                 .update({
@@ -190,7 +177,6 @@ export default function SignInPage() {
                 throw new Error("Failed to create session.");
             }
 
-            // Store session information in sessionStorage
             sessionStorage.setItem(STORAGE_KEYS.SESSION_TOKEN, newSessionToken);
             sessionStorage.setItem(STORAGE_KEYS.USER_ID, user.id.toString());
             sessionStorage.setItem(STORAGE_KEYS.USERNAME, username);
@@ -204,7 +190,6 @@ export default function SignInPage() {
             router.push(`/profile?username=${encodeURIComponent(username)}`);
         } catch (error) {
             if (error instanceof Error) {
-            //console.error("Sign in error:", error);
             showToast("An error occurred during sign in. Please try again.");
             }
         } finally {
@@ -213,28 +198,23 @@ export default function SignInPage() {
     };
 
     return (
-        <div className="min-h-screen bg-gray-900 flex items-center justify-center p-4">
-            <div className="bg-gray-800 p-8 rounded-lg shadow-md w-full max-w-md">
-                <h1 className="text-3xl font-bold text-white mb-6 text-center">
-                    Sign In
+        <div className="min-h-screen bg-gradient-to-b from-gray-900 via-purple-900 to-violet-600 flex items-center justify-center p-4">
+            <div className="bg-gray-800/50 backdrop-blur-lg p-8 rounded-xl shadow-xl max-w-md w-full">
+                <h1 className="text-3xl font-bold text-white text-center mb-8">
+                    Galaxy KickLock SignIn
                 </h1>
+                
                 {toastMessage && (
-                    <div className={`fixed bottom-4 right-4 px-4 py-2 rounded-lg shadow-lg ${
-                        toastMessage.includes("error") || toastMessage.includes("Invalid") 
-                            ? "bg-red-600"
-                            : "bg-green-600"
-                    } text-white transition-opacity duration-300`}>
+                    <div className="mb-4 p-3 bg-blue-500/20 text-white rounded-lg text-center">
                         {toastMessage}
                     </div>
                 )}
+
                 <form onSubmit={handleSubmit} className="space-y-6">
                     <div>
-                        <label htmlFor="username" className="block text-white text-sm font-medium mb-2">
-                            Username
-                        </label>
+                        <label className="block text-white mb-2">Username</label>
                         <input
                             type="text"
-                            id="username"
                             value={username}
                             onChange={(e) => setUsername(e.target.value)}
                             className="w-full px-4 py-2 bg-gray-700 text-white rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
@@ -242,13 +222,11 @@ export default function SignInPage() {
                             disabled={isLoading}
                         />
                     </div>
+
                     <div>
-                        <label htmlFor="password" className="block text-white text-sm font-medium mb-2">
-                            Password
-                        </label>
+                        <label className="block text-white mb-2">Password</label>
                         <input
                             type="password"
-                            id="password"
                             value={password}
                             onChange={(e) => setPassword(e.target.value)}
                             className="w-full px-4 py-2 bg-gray-700 text-white rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
@@ -256,10 +234,11 @@ export default function SignInPage() {
                             disabled={isLoading}
                         />
                     </div>
+
                     <button
                         type="submit"
+                        className="w-full py-3 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition duration-200 disabled:opacity-50"
                         disabled={isLoading}
-                        className="w-full bg-blue-600 hover:bg-blue-700 text-white font-medium py-2 px-4 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 transition duration-300 disabled:opacity-50"
                     >
                         {isLoading ? "Signing in..." : "Sign In"}
                     </button>
