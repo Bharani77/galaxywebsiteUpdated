@@ -6,7 +6,6 @@ import { createClient } from "@supabase/supabase-js";
 import { ToastContainer, toast } from 'react-toastify';
 import 'react-toastify/dist/ReactToastify.css';
 
-// Initialize Supabase client
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
 const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
 const supabase = createClient(supabaseUrl!, supabaseAnonKey!);
@@ -21,31 +20,25 @@ function ProfileContent() {
         const sessionId = sessionStorage.getItem("sessionId");
 
         if (!userId || !sessionId) {
-            // Check if there's an active session in DB
             const { data: user, error } = await supabase
                 .from("users")
-                .select("active_session_id")
+                .select("id, active_session_id")
                 .eq("username", username)
                 .single();
 
             if (user && user.active_session_id) {
-                // Active session exists in another tab
                 await supabase.rpc('terminate_session', { user_id: user.id });
                 sessionStorage.clear();
                 toast.error('Duplicate session detected. Multiple tabs are not allowed.', {
                     onClose: () => router.push('/signin')
                 });
             } else {
-                // No active session anywhere
                 sessionStorage.clear();
-                toast.warning('Session expired. Please sign in again.', {
-                    onClose: () => router.push('/signin')
-                });
+                router.push('/signin');
             }
             return;
         }
 
-        // Query the database to check if the session is still valid
         const { data: user, error } = await supabase
             .from("users")
             .select("active_session_id")
@@ -53,7 +46,6 @@ function ProfileContent() {
             .single();
 
         if (error || !user || user.active_session_id !== sessionId) {
-            // Session is no longer valid, terminate it
             sessionStorage.clear();
             toast.error('Session invalid. Please sign in again.', {
                 onClose: () => router.push('/signin')
@@ -62,13 +54,10 @@ function ProfileContent() {
     };
 
     useEffect(() => {
-        // Initial session validation
         validateSession();
 
-        // Validate session every 10 seconds
         const interval = setInterval(validateSession, 10000);
 
-        // Listen for real-time updates to the user's session
         const userId = sessionStorage.getItem("userId");
         if (userId) {
             const channel = supabase
@@ -118,7 +107,6 @@ function ProfileContent() {
                     </span>
                     !
                 </h1>
-                {/* Add other content or components here */}
             </div>
         </div>
     );
