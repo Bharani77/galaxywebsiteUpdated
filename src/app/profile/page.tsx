@@ -17,16 +17,25 @@ function ProfileContent() {
     const urlUsername = searchParams.get("username");
     
     const validateSession = async () => {
-        const userId = sessionStorage.getItem("userId");
-        const sessionId = sessionStorage.getItem("sessionId");
-        const storedUsername = sessionStorage.getItem("username");
+        let userId: string | null = null;
+        let sessionId: string | null = null;
+        let storedUsername: string | null = null;
+        
+        try {
+            userId = sessionStorage.getItem("userId");
+            sessionId = sessionStorage.getItem("sessionId");
+            storedUsername = sessionStorage.getItem("username");
+        } catch (error) {
+            console.error('Error accessing sessionStorage:', error);
+            router.push('/signin');
+            return;
+        }
 
         // First validate if URL username matches stored username
         if (urlUsername !== storedUsername) {
             sessionStorage.clear();
-            toast.error('Invalid URL. Redirecting to signin...', {
-                onClose: () => router.push('/signin')
-            });
+            toast.error('Invalid URL. Redirecting to signin...');
+            router.push('/signin');
             return;
         }
 
@@ -38,19 +47,28 @@ function ProfileContent() {
                 .eq("username", urlUsername)
                 .single();
 
-            if (user && user.active_session_id) {
+            if (error) {
+                console.error('Database error:', error);
+                toast.error('Error validating session');
+                return;
+            }
+
+            if (user?.active_session_id) {
                 // Active session exists in another tab
-                await supabase.rpc('terminate_session', { user_id: user.id });
+                try {
+                    await supabase.rpc('terminate_session', { user_id: user.id });
+                } catch (rpcError) {
+                    console.error('Failed to terminate session:', rpcError);
+                    toast.error('Error ending previous session');
+                }
                 sessionStorage.clear();
-                toast.error('Duplicate session detected. Multiple tabs are not allowed.', {
-                    onClose: () => router.push('/signin')
-                });
+                router.push('/signin');
+                toast.error('Duplicate session detected. Multiple tabs are not allowed.');
             } else {
                 // No active session anywhere
                 sessionStorage.clear();
-                toast.error('No active session found. Please sign in.', {
-                    onClose: () => router.push('/signin')
-                });
+                router.push('/signin');
+                toast.error('No active session found. Please sign in.');
             }
             return;
         }
@@ -62,12 +80,17 @@ function ProfileContent() {
             .eq("id", userId)
             .single();
 
-        if (error || !user || user.active_session_id !== sessionId || user.username !== urlUsername) {
+        if (error) {
+            console.error('Database error:', error);
+            toast.error('Error validating session');
+            return;
+        }
+
+        if (!user || user.active_session_id !== sessionId || user.username !== urlUsername) {
             // Session is invalid or username doesn't match
             sessionStorage.clear();
-            toast.error('Invalid session or URL. Please sign in again.', {
-                onClose: () => router.push('/signin')
-            });
+            router.push('/signin');
+            toast.error('Invalid session or URL. Please sign in again.');
             return;
         }
     };

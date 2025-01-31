@@ -4,6 +4,30 @@ import React, { useState, useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@supabase/supabase-js";
 
+const hashPassword = async (password: string): Promise<string> => {
+    if (typeof crypto === 'undefined') {
+        throw new Error('Crypto API not available');
+    }
+    const encoder = new TextEncoder();
+    const data = encoder.encode(password);
+    const hashBuffer = await crypto.subtle.digest('SHA-256', data);
+    return Array.from(new Uint8Array(hashBuffer))
+        .map(b => b.toString(16).padStart(2, '0'))
+        .join('');
+};
+
+const hashPassword = async (password: string): Promise<string> => {
+    if (typeof crypto === 'undefined') {
+        throw new Error('Crypto API not available');
+    }
+    const encoder = new TextEncoder();
+    const data = encoder.encode(password);
+    const hashBuffer = await crypto.subtle.digest('SHA-256', data);
+    return Array.from(new Uint8Array(hashBuffer))
+        .map(b => b.toString(16).padStart(2, '0'))
+        .join('');
+};
+
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
 const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
 const supabase = createClient(supabaseUrl!, supabaseAnonKey!);
@@ -40,28 +64,52 @@ export default function SignInPage() {
         return crypto.randomUUID();
     };
 
-    const handleSessionTermination = async (message: string = "Your session has ended.") => {
-        try {
-            const userId = sessionStorage.getItem(STORAGE_KEYS.USER_ID);
-            if (userId) {
-                console.log("Terminating session for user:", userId);
-                Object.values(STORAGE_KEYS).forEach(key => {
-                    sessionStorage.removeItem(key);
-                    console.log("Removed key from session storage:", key);
-                });
+    const clearSessionStorage = () => {
+        Object.values(STORAGE_KEYS).forEach(key => sessionStorage.removeItem(key));
+    };
 
-                await supabase
-                    .from("users")
-                    .update({
-                        session_token: null,
-                        active_session_id: null,
-                        last_logout: new Date().toISOString()
-                    })
-                    .eq("id", userId);
-            }
+    interface SessionData {
+        userId: string | null;
+        sessionToken: string | null;
+        username: string | null;
+        sessionId: string | null;
+    }
+
+    const getSessionData = (): SessionData => ({
+        userId: sessionStorage.getItem(STORAGE_KEYS.USER_ID),
+        sessionToken: sessionStorage.getItem(STORAGE_KEYS.SESSION_TOKEN),
+        username: sessionStorage.getItem(STORAGE_KEYS.USERNAME),
+        sessionId: sessionStorage.getItem(STORAGE_KEYS.SESSION_ID)
+    });
+
+    const handleSessionTermination = async (message: string = "Your session has ended.") => {
+        const { userId } = getSessionData();
+        if (!userId) return;
+
+        try {
+            const { error } = await supabase
+                .from("users")
+                .update({
+                    session_token: null,
+                    active_session_id: null,
+                    last_logout: new Date().toISOString()
+                })
+                .eq("id", userId);
+
+            if (error) throw error;
+            
+            await supabase
+                .channel('session_updates')
+                .send({
+                    type: 'broadcast',
+                    event: 'session_terminated',
+                    payload: { userId: parseInt(userId) }
+                });
         } catch (error) {
-            console.error("Error in session termination:", error);
+            console.error("Session termination error:", error);
+            showToast("Failed to properly end session. Please clear browser data.");
         } finally {
+            clearSessionStorage();
             router.push("/");
             showToast(message);
         }
@@ -74,14 +122,11 @@ export default function SignInPage() {
                 sessionChannel.current = supabase
                     .channel('session_updates')
                     .on('broadcast', { event: 'session_terminated' }, async (payload) => {
-                        console.log("Received session termination broadcast for user:", payload.userId);
                         if (payload.userId === parseInt(userId)) {
                             await handleSessionTermination("Your session was ended due to a new login.");
                         }
                     })
-                    .subscribe((status) => {
-                        console.log("Subscription status:", status);
-                    });
+                    .subscribe();
             }
         };
 
@@ -94,49 +139,78 @@ export default function SignInPage() {
         };
     }, [router]);
 
+    const validateInputs = () => {
+        if (!username.trim() || !password.trim()) {
+            showToast("Username and password are required");
+            return false;
+        }
+        if (password.length < 8) {
+            showToast("Password must be at least 8 characters");
+            return false;
+        }
+        return true;
+    };
+
+    const authenticateUser = async () => {
+        const { data: user, error } = await supabase
+            .from("users")
+            .select("id, username, password, active_session_id, login_count")
+            .eq("username", username)
+            .single();
+
+        if (error || !user) {
+            showToast("Invalid credentials");
+            return null;
+        }
+
+        if (user.password !== await hashPassword(password)) {
+            showToast("Invalid credentials");
+            return null;
+        }
+
+        return user;
+    };
+
+    const updateUserSession = async (userId: string, sessionToken: string, sessionId: string, loginCount: number) => {
+        const { error } = await supabase
+            .from("users")
+            .update({
+                session_token: sessionToken,
+                active_session_id: sessionId,
+                login_count: loginCount + 1,
+                last_login: new Date().toISOString()
+            })
+            .eq("id", userId);
+
+        if (error) throw error;
+    };
+
+    const storeSessionData = (sessionToken: string, userId: string, username: string, sessionId: string) => {
+        sessionStorage.setItem(STORAGE_KEYS.SESSION_TOKEN, sessionToken);
+        sessionStorage.setItem(STORAGE_KEYS.USER_ID, userId);
+        sessionStorage.setItem(STORAGE_KEYS.USERNAME, username);
+        sessionStorage.setItem(STORAGE_KEYS.SESSION_ID, sessionId);
+    };
+
+    const completeLoginFlow = () => {
+        router.push("/profile?username=" + encodeURIComponent(username));
+    };
+
     const handleSubmit = async (event: React.FormEvent) => {
         event.preventDefault();
-        
         if (isLoading) return;
+        
         setIsLoading(true);
-
         try {
-            if (!username.trim() || !password.trim()) {
-                showToast("Please enter both username and password");
-                setIsLoading(false);
-                return;
-            }
+            if (!validateInputs()) return;
 
-            if (!supabase) {
-                throw new Error("Supabase client is not initialized.");
-            }
-
-            const { data: user, error: userError } = await supabase
-                .from("users")
-                .select("*")
-                .eq("username", username)
-                .single();
-
-            if (userError || !user) {
-                showToast("Invalid credentials");
-                setIsLoading(false);
-                return;
-            }
-
-            if (user.password !== password) {
-                showToast("Invalid credentials");
-                setIsLoading(false);
-                return;
-            }
+            const user = await authenticateUser();
+            if (!user) return;
 
             const newSessionToken = generateSessionToken();
             const newSessionId = generateSessionId();
 
-            console.log("Creating new session for user:", user.id);
-            console.log("New session ID:", newSessionId);
-
             if (user.active_session_id) {
-                console.log("Terminating existing session for user:", user.id);
                 const { error: terminateError } = await supabase
                     .from("users")
                     .update({
@@ -146,9 +220,7 @@ export default function SignInPage() {
                     })
                     .eq("id", user.id);
 
-                if (terminateError) {
-                    throw new Error("Failed to terminate existing session.");
-                }
+                if (terminateError) throw new Error("Failed to terminate existing session.");
 
                 await supabase
                     .channel('session_updates')
@@ -157,41 +229,13 @@ export default function SignInPage() {
                         event: 'session_terminated',
                         payload: { userId: user.id }
                     });
-
-                console.log("Broadcasted session termination for user:", user.id);
-
-                await new Promise(resolve => setTimeout(resolve, 1000));
             }
 
-            const { error: updateError } = await supabase
-                .from("users")
-                .update({
-                    session_token: newSessionToken,
-                    active_session_id: newSessionId,
-                    last_login: new Date().toISOString(),
-                    login_count: (user.login_count || 0) + 1
-                })
-                .eq("id", user.id);
-
-            if (updateError) {
-                throw new Error("Failed to create session.");
-            }
-
-            sessionStorage.setItem(STORAGE_KEYS.SESSION_TOKEN, newSessionToken);
-            sessionStorage.setItem(STORAGE_KEYS.USER_ID, user.id.toString());
-            sessionStorage.setItem(STORAGE_KEYS.USERNAME, username);
-            sessionStorage.setItem(STORAGE_KEYS.SESSION_ID, newSessionId);
-
-            console.log("Session data saved in sessionStorage");
-
-            setUsername("");
-            setPassword("");
-            showToast("Sign in successful!");
-            router.push(`/profile?username=${encodeURIComponent(username)}`);
+            await updateUserSession(user.id.toString(), newSessionToken, newSessionId, user.login_count);
+            storeSessionData(newSessionToken, user.id.toString(), user.username, newSessionId);
+            completeLoginFlow();
         } catch (error) {
-            if (error instanceof Error) {
             showToast("An error occurred during sign in. Please try again.");
-            }
         } finally {
             setIsLoading(false);
         }
