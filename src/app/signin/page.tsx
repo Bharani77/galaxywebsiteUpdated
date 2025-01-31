@@ -4,30 +4,6 @@ import React, { useState, useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@supabase/supabase-js";
 
-const hashPassword = async (password: string): Promise<string> => {
-    if (typeof crypto === 'undefined') {
-        throw new Error('Crypto API not available');
-    }
-    const encoder = new TextEncoder();
-    const data = encoder.encode(password);
-    const hashBuffer = await crypto.subtle.digest('SHA-256', data);
-    return Array.from(new Uint8Array(hashBuffer))
-        .map(b => b.toString(16).padStart(2, '0'))
-        .join('');
-};
-
-const hashPassword = async (password: string): Promise<string> => {
-    if (typeof crypto === 'undefined') {
-        throw new Error('Crypto API not available');
-    }
-    const encoder = new TextEncoder();
-    const data = encoder.encode(password);
-    const hashBuffer = await crypto.subtle.digest('SHA-256', data);
-    return Array.from(new Uint8Array(hashBuffer))
-        .map(b => b.toString(16).padStart(2, '0'))
-        .join('');
-};
-
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
 const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
 const supabase = createClient(supabaseUrl!, supabaseAnonKey!);
@@ -152,23 +128,38 @@ export default function SignInPage() {
     };
 
     const authenticateUser = async () => {
-        const { data: user, error } = await supabase
-            .from("users")
-            .select("id, username, password, active_session_id, login_count")
-            .eq("username", username)
-            .single();
+        try {
+            console.log('Attempting login with username:', username);
 
-        if (error || !user) {
-            showToast("Invalid credentials");
+            const { data: user, error } = await supabase
+                    .from("users")
+                .select("id, username, password, active_session_id, login_count")
+                .eq("username", username)
+                .single();
+
+            if (error) {
+                console.error('Database error:', error);
+                showToast("Invalid credentials");
+                return null;
+            }
+
+            if (!user) {
+                console.log('No user found with username:', username);
+                showToast("Invalid credentials");
+                return null;
+            }
+
+            if (user.password !== password) {
+                console.log('Password mismatch');
+                showToast("Invalid credentials");
+                return null;
+            }
+            return user;
+        } catch (error) {
+            console.error('Authentication error:', error);
+            showToast("An error occurred during authentication");
             return null;
         }
-
-        if (user.password !== await hashPassword(password)) {
-            showToast("Invalid credentials");
-            return null;
-        }
-
-        return user;
     };
 
     const updateUserSession = async (userId: string, sessionToken: string, sessionId: string, loginCount: number) => {
@@ -234,7 +225,8 @@ export default function SignInPage() {
             await updateUserSession(user.id.toString(), newSessionToken, newSessionId, user.login_count);
             storeSessionData(newSessionToken, user.id.toString(), user.username, newSessionId);
             completeLoginFlow();
-        } catch (error) {
+        }  catch (error: unknown) {
+            console.error('Sign in error:', error);
             showToast("An error occurred during sign in. Please try again.");
         } finally {
             setIsLoading(false);
