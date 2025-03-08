@@ -3,8 +3,10 @@
 @tailwind utilities;
 
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  --background: #1a1a1a;
+  --foreground: #f5f5f5;
+  --primary-color: #4a90e2;
+  --secondary-color: #50e3c2;
 }
 
 @media (prefers-color-scheme: dark) {
@@ -18,4 +20,24 @@ body {
   color: var(--foreground);
   background: var(--background);
   font-family: Arial, Helvetica, sans-serif;
+}
+
+button {
+  background-color: var(--primary-color);
+  color: var(--foreground);
+  border: none;
+  padding: 10px 20px;
+  border-radius: 5px;
+  cursor: pointer;
+  transition: background-color 0.3s;
+}
+
+button:hover {
+  background-color: var(--secondary-color);
+}
+
+.logoutButton {
+  position: absolute;
+  top: 20px;
+  right: 20px;
 }

@@ -112,8 +112,19 @@ function ProfileContent() {
         return () => clearInterval(interval);
     }, [router, urlUsername]);
 
+    const handleLogout = () => {
+        sessionStorage.clear();
+        router.push('/signin');
+    };
+
     return (
-        <div className="min-h-screen bg-gradient-to-b from-gray-900 via-purple-900 to-violet-600 flex flex-col items-center justify-center p-4">
+        <div className="min-h-screen bg-gradient-to-b from-gray-900 via-purple-900 to-violet-600 flex flex-col items-center justify-center p-4 relative">
+            <button 
+                className="absolute top-4 right-4 bg-red-600 hover:bg-red-700 text-white font-bold py-2 px-4 rounded logoutButton" 
+                onClick={handleLogout}
+            >
+                Logout
+            </button>
             <ToastContainer
                 position="top-right"
                 autoClose={3000}
