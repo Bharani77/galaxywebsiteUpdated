@@ -118,7 +118,7 @@ function ProfileContent() {
     };
 
     return (
-        <div className="min-h-screen bg-gradient-to-b from-gray-900 via-purple-900 to-violet-600 flex flex-col items-center justify-center p-4 relative">
+        <div className="min-h-screen bg-gradient-to-b from-black via-red-950 to-red-900 flex flex-col items-center justify-center p-4 relative">
             <button 
                 className="absolute top-4 right-4 bg-red-600 hover:bg-red-700 text-white font-bold py-2 px-4 rounded logoutButton" 
                 onClick={handleLogout}
@@ -145,7 +145,7 @@ function ProfileContent() {
 export default function ProfilePage() {
     return (
         <Suspense fallback={
-            <div className="min-h-screen bg-gradient-to-b from-gray-900 via-purple-900 to-violet-600 flex items-center justify-center">
+            <div className="min-h-screen bg-gradient-to-b from-black via-red-950 to-red-900 flex items-center justify-center">
                 <div className="text-white text-xl">Loading...</div>
             </div>
         }>
