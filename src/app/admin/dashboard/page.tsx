@@ -2,11 +2,19 @@
 
 import { createClient } from '@supabase/supabase-js';
 import React, { useState, useEffect, useCallback } from 'react';
+import { useRouter } from 'next/navigation';
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
 const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
 
 const supabase = createClient(supabaseUrl, supabaseAnonKey);
+
+// Add admin storage keys
+const ADMIN_STORAGE_KEYS = {
+    ADMIN_ID: 'adminId',
+    ADMIN_USERNAME: 'adminUsername',
+    ADMIN_SESSION_ID: 'adminSessionId'
+};
 
 interface TokenUser {
     token: string;
@@ -18,26 +26,47 @@ interface TokenUser {
 }
 
 export default function AdminDashboardPage() {
+    const router = useRouter();
+    
+    // Add state for admin name
+    const [adminName, setAdminName] = useState<string>('');
+    
+    // Add logout function
+    const handleLogout = () => {
+        // Clear admin session data from localStorage
+        Object.values(ADMIN_STORAGE_KEYS).forEach(key => localStorage.removeItem(key));
+        
+        // Broadcast logout event to other tabs
+        localStorage.setItem('admin_logout_event', Date.now().toString());
+        
+        // Redirect to admin login page
+        router.push('/admin');
+    };
+    
     const [tokens, setTokens] = useState<{ [key: string]: string }>({
         '3month': '',
         '6month': '',
         '1year': '',
     });
+    
     const [isLoading, setIsLoading] = useState<{ [key: string]: boolean }>({
         '3month': false,
         '6month': false,
         '1year': false,
     });
+    
     const [isDeletingToken, setIsDeletingToken] = useState<{ [key: string]: { [tokenId: string]: boolean } }>({
         '3month': {},
         '6month': {},
         '1year': {},
     });
+    
     const [tokenHistory, setTokenHistory] = useState<{ [key: string]: { token: string; status: string; id: string }[] }>({
         '3month': [],
         '6month': [],
         '1year': [],
     });
+    
     const [tokenUsers, setTokenUsers] = useState<TokenUser[]>([]);
     const [isRenewModalOpen, setIsRenewModalOpen] = useState<boolean>(false);
     const [selectedUserId, setSelectedUserId] = useState<string | null>(null);
@@ -45,9 +74,33 @@ export default function AdminDashboardPage() {
     const [isDeleteModalOpen, setIsDeleteModalOpen] = useState<boolean>(false);
     const [selectedUserForDelete, setSelectedUserForDelete] = useState<{ userId: string; token: string } | null>(null);
     const [toastMessage, setToastMessage] = useState<string | null>(null);
-
+    
+    // Add effect to get admin name from localStorage
+    useEffect(() => {
+        const username = localStorage.getItem(ADMIN_STORAGE_KEYS.ADMIN_USERNAME);
+        if (username) {
+            setAdminName(username);
+        }
+    }, []);
+    
+    // Add listener for logout events from other tabs
+    useEffect(() => {
+        const handleStorageChange = (e: StorageEvent) => {
+            if (e.key === 'admin_logout_event') {
+                // Another tab triggered logout, redirect to login page
+                router.push('/admin');
+            }
+        };
+        
+        window.addEventListener('storage', handleStorageChange);
+        
+        return () => {
+            window.removeEventListener('storage', handleStorageChange);
+        };
+    }, [router]);
+    
     const MAX_HISTORY_LENGTH = 5;
-
+    
     // Show toast message
     const showToast = (message: string) => {
         setToastMessage(message);
@@ -552,6 +605,19 @@ export default function AdminDashboardPage() {
     return (
         <div className="min-h-screen bg-gray-900 text-white p-4">
             <div className="max-w-7xl mx-auto">
+                {/* Add logout button at the top */}
+                <div className="flex justify-between mb-4 items-center">
+                    <div className="text-xl font-semibold">
+                        Welcome, {adminName || 'Admin'}
+                    </div>
+                    <button
+                        onClick={handleLogout}
+                        className="bg-red-600 hover:bg-red-700 text-white font-bold py-2 px-4 rounded focus:outline-none focus:shadow-outline"
+                    >
+                        Logout
+                    </button>
+                </div>
+                
                 <h2 className="text-2xl font-bold mb-6 text-center">Admin Dashboard - Token Generator</h2>
 
                 {/* Toast Notification */}
@@ -755,19 +821,19 @@ export default function AdminDashboardPage() {
                         <div className="flex justify-end gap-2">
                             <button
                                 onClick={() => handleDeleteAction('token')}
-                                className="bg-red-600 hover:bg-red-700 px-4 py-2 rounded"
+                                className="bg-red-600 hover:text-red-700 px-4 py-2 rounded"
                             >
                                 Delete Token
                             </button>
                             <button
                                 onClick={() => handleDeleteAction('user')}
-                                className="bg-red-600 hover:bg-red-700 px-4 py-2 rounded"
+                                className="bg-red-600 hover:text-red-700 px-4 py-2 rounded"
                             >
                                 Delete User
                             </button>
                             <button
                                 onClick={closeDeleteModal}
-                                className="bg-gray-600 hover:bg-gray-700 px-4 py-2 rounded"
+                                className="bg-gray-600 hover:text-gray-700 px-4 py-2 rounded"
                             >
                                 Cancel
                             </button>
