@@ -5,6 +5,7 @@ import React, { Suspense, useEffect } from "react";
 import { createClient } from "@supabase/supabase-js";
 import { ToastContainer, toast } from 'react-toastify';
 import 'react-toastify/dist/ReactToastify.css';
+import GalaxyForm from './GalaxyForm';
 
 // Initialize Supabase client
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
@@ -125,16 +126,7 @@ function ProfileContent() {
                 pauseOnHover
                 theme="light"
             />
-            <div className="bg-white/10 backdrop-blur-lg rounded-xl p-8 shadow-lg max-w-md w-full">
-                <h1 className="text-2xl font-bold text-white mb-4">
-                    Hello,{" "}
-                    <span className="text-purple-300">
-                        {urlUsername ? urlUsername : "Guest"}
-                    </span>
-                    !
-                </h1>
-                {/* Add other content or components here */}
-            </div>
+            <GalaxyForm />
         </div>
     );
 }
