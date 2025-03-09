@@ -219,7 +219,7 @@ const GalaxyForm: React.FC = () => {
         return acc;
       }, {} as Record<string, string>);
   
-      const response = await fetch(`https://bharanidharan.serveo.net/${action}/${formNumber}`, {
+      const response = await fetch(`https://jlcgrk-32774.csb.app/${action}/${formNumber}`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json'
