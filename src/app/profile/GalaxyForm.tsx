@@ -219,7 +219,7 @@ const GalaxyForm: React.FC = () => {
         return acc;
       }, {} as Record<string, string>);
   
-      const response = await fetch(`https://profound-frank-mackerel.ngrok-free.app/${action}/${formNumber}`, {
+      const response = await fetch(`https://bharanidharan.loca.lt/${action}/${formNumber}`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json'
