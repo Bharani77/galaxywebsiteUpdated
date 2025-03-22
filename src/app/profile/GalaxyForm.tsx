@@ -219,14 +219,14 @@ const GalaxyForm: React.FC = () => {
         return acc;
       }, {} as Record<string, string>);
   
-      const response = await fetch(`https://97f4-178-63-141-96.ngrok-free.app/app1/${action}/${formNumber}`, {
+      const response = await fetch(`https://bharani77--web-web-app.modal.run/${action}/${formNumber}`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json'
         },
         body: JSON.stringify(modifiedFormData)
       });
-  
+      
       if (response.ok) {
         setButtonStates(prev => ({
           ...prev,
