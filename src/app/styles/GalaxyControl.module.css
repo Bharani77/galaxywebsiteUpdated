@@ -8,112 +8,56 @@
     align-items: center;
     padding: 2rem 1rem;
     z-index: 1;
-    background: linear-gradient(135deg, #000000, #220000); /* Ensuring dark red, not violet */
+    background-color: #000000; /* Base black background */
+    /* Removing diagonal line background */
+    isolation: isolate;
+    box-sizing: border-box;
+    margin: 0;
+    border: none;
     isolation: isolate;
     box-sizing: border-box;
     margin: 0;
     border: none;
   }
-  
-  .stars {
-    position: absolute;
-    top: 0;
-    left: 0;
-    width: 100%;
-    height: 100%;
-    background: #000;
-    z-index: -2;
-    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='400' height='400' viewBox='0 0 800 800'%3E%3Cg fill='none' stroke='%23400000' stroke-width='1'%3E%3Cpath d='M769 229L1037 260.9M927 880L731 737 520 660 309 538 40 599 295 764 126.5 879.5 40 599-197 493 102 382-31 229 126.5 79.5-69-63'/%3E%3Cpath d='M-31 229L237 261 390 382 603 493 308.5 537.5 101.5 381.5M370 905L295 764'/%3E%3Cpath d='M520 660L578 842 731 737 840 599 603 493 520 660 295 764 309 538 390 382 539 269 769 229 577.5 41.5 370 105 295 -36 126.5 79.5 237 261 102 382 40 599 -69 737 127 880'/%3E%3Cpath d='M520-140L578.5 42.5 731-63M603 493L539 269 237 261 370 105M902 382L539 269M390 382L102 382'/%3E%3Cpath d='M-222 42L126.5 79.5 370 105 539 269 577.5 41.5 927 80 769 229 902 382 603 493 731 737M295-36L577.5 41.5M578 842L295 764M40-201L127 80M102 382L-261 269'/%3E%3C/g%3E%3Cg fill='%23AA3030'%3E%3Ccircle cx='769' cy='229' r='5'/%3E%3Ccircle cx='539' cy='269' r='5'/%3E%3Ccircle cx='603' cy='493' r='5'/%3E%3Ccircle cx='731' cy='737' r='5'/%3E%3Ccircle cx='520' cy='660' r='5'/%3E%3Ccircle cx='309' cy='538' r='5'/%3E%3Ccircle cx='295' cy='764' r='5'/%3E%3Ccircle cx='40' cy='599' r='5'/%3E%3Ccircle cx='102' cy='382' r='5'/%3E%3Ccircle cx='127' cy='80' r='5'/%3E%3Ccircle cx='370' cy='105' r='5'/%3E%3Ccircle cx='578' cy='42' r='5'/%3E%3Ccircle cx='237' cy='261' r='5'/%3E%3Ccircle cx='390' cy='382' r='5'/%3E%3C/g%3E%3C/svg%3E");
-    animation: starsAnimation 100s linear infinite;
-    will-change: transform;
-    overflow: hidden;
-  }
-  
-  /* Add twinkling stars effect */
-  .stars::after {
+
+  /* Fire GIF Background Effect */
+  .container::before,
+  .container::after {
     content: '';
-    position: absolute;
-    top: 0;
-    left: 0;
-    width: 100%;
-    height: 100%;
-    background-image: radial-gradient(#ff3333 1px, transparent 1px), radial-gradient(#ff5555 1px, transparent 1px), radial-gradient(#ff7777 0.5px, transparent 0.5px);
-    background-size: 50px 50px, 100px 100px, 25px 25px;
-    background-position: 0 0, 25px 25px, 50px 50px;
-    animation: twinkle 4s ease-in-out infinite alternate;
-    opacity: 0.5;
+    position: fixed; /* Use fixed positioning to stick to viewport edges */
+    bottom: -20px; /* Slightly overlap bottom edge */
+    width: 240px; /* Made larger */
+    height: 360px; /* Made larger (maintaining aspect ratio) */
+    background-image: url('https://media1.tenor.com/m/liJ84fQBFgsAAAAd/shane-ford.gif');
+    background-size: contain; /* Scale the GIF to fit */
+    background-repeat: no-repeat;
+    background-position: bottom center;
+    z-index: 0; /* Behind content */
+    opacity: 1; /* Use full opacity, mask will handle fading */
+    pointer-events: none; /* Prevent interaction */
+    /* mix-blend-mode removed, using mask instead */
+    mask-image: linear-gradient(to top, black 60%, transparent 100%),
+                linear-gradient(to left, black 80%, transparent 100%),
+                linear-gradient(to right, black 80%, transparent 100%);
+    mask-composite: intersect; /* Combine masks */
+    -webkit-mask-image: linear-gradient(to top, black 60%, transparent 100%),
+                        linear-gradient(to left, black 80%, transparent 100%),
+                        linear-gradient(to right, black 80%, transparent 100%);
+    -webkit-mask-composite: source-in; /* Combine masks for WebKit */
   }
+
+  .container::before {
+    left: -30px; /* Overlap left edge */
+    transform: scaleX(-1); /* Mirror the left GIF */
+  }
+
+  .container::after {
+    right: -30px; /* Overlap right edge */
+  }
+
+  /* Removed subtleLines keyframes */
   
-  @keyframes twinkle {
-    0%, 100% {
-      opacity: 0.4;
-    }
-    50% {
-      opacity: 0.8;
-    }
-  }
-  
-  @keyframes starsAnimation {
-    0% {
-      background-position: 0% 0%;
-    }
-    100% {
-      background-position: 100% 100%;
-    }
-  }
-  
-  .nebula {
-    position: absolute;
-    top: 0;
-    left: 0;
-    width: 100%;
-    height: 100%;
-    background: linear-gradient(45deg, rgba(80, 0, 0, 0.15), rgba(0, 0, 0, 0.3)); /* Ensuring dark red, not violet */
-    background-size: 200% 200%;
-    box-sizing: border-box;
-    z-index: -1;
-    animation: nebulaAnimation 30s ease infinite alternate;
-    opacity: 0.7;
-    will-change: transform;
-    overflow: hidden;
-  }
-  
-  /* Add cosmic dust effect */
-  .nebula::before {
-    content: '';
-    position: absolute;
-    top: 0;
-    left: 0;
-    width: 100%;
-    height: 100%;
-    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='100' height='100' viewBox='0 0 200 200'%3E%3Cdefs%3E%3CradialGradient id='a' cx='100' cy='100' r='50' gradientUnits='userSpaceOnUse'%3E%3Cstop offset='0' stop-color='%23AA2020' stop-opacity='.2'/%3E%3Cstop offset='1' stop-color='%23AA2020' stop-opacity='0'/%3E%3C/radialGradient%3E%3C/defs%3E%3Ccircle cx='100' cy='100' r='50' fill='url(%23a)'/%3E%3C/svg%3E");
-    background-size: 200px 200px;
-    opacity: 0.3;
-    animation: dustAnimation 60s linear infinite;
-  }
-  
-  @keyframes dustAnimation {
-    0% {
-      background-position: 0% 0%;
-    }
-    100% {
-      background-position: 200% 200%;
-    }
-  }
-  
-  @keyframes nebulaAnimation {
-    0% {
-      background-position: 0% 0%;
-      opacity: 0.5;
-    }
-    50% {
-      opacity: 0.7;
-    }
-    100% {
-      background-position: 100% 100%;
-      opacity: 0.5;
-    }
-  }
+  /* Removed .stars, .nebula, and associated animations */
   
   .title {
     font-size: 3rem;
@@ -121,48 +65,42 @@
     color: white;
     text-align: center;
     margin-bottom: 2.5rem;
-    text-shadow: 0 0 15px rgba(255, 255, 255, 0.7); /* Pure white glow */
+    text-shadow: 0 0 10px var(--primary-color); /* Add subtle red glow */
     letter-spacing: 2px;
   }
   
   .kickLock {
-    background: linear-gradient(to right, #ff3030, #aa2020, #ff5050); /* Pure reds, no violet */
-    -webkit-background-clip: text;
-    background-clip: text;
-    color: transparent;
-    font-weight: 800;
+    /* background gradient removed */
+    /* -webkit-background-clip: text; */
+    /* background-clip: text; */
+    color: var(--primary-color); /* Bright Red title */
+    font-family: 'Bungee', cursive; /* Apply Bungee font for title */
+    font-weight: 400; /* Bungee is often best at normal weight */
     position: relative;
     display: inline-block;
-    animation: titlePulse 3s ease-in-out infinite;
-    -webkit-text-fill-color: transparent;
+    /* animation removed */
+    /* -webkit-text-fill-color: transparent; */
   }
   
-  @keyframes titlePulse {
-    0%, 100% {
-      filter: drop-shadow(0 0 8px rgba(255, 0, 0, 0.7)); /* Pure red glow */
-    }
-    50% {
-      filter: drop-shadow(0 0 15px rgba(255, 0, 0, 0.9)); /* Pure red glow */
-    }
-  }
+  /* @keyframes titlePulse removed */
   
   .formContainer {
     width: 100%;
     max-width: 800px;
     margin-bottom: 1.5rem;
-    background: rgba(0, 0, 0, 0.9);
+    background: rgba(10, 10, 10, 0.85); /* Slightly transparent near-black background */
     backdrop-filter: blur(10px);
     -webkit-backdrop-filter: blur(10px);
     border-radius: 12px;
     padding: 1.5rem;
-    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5), 0 0 15px rgba(255, 0, 0, 0.3); /* Pure red glow */
-    border: 1px solid rgba(255, 0, 0, 0.5); /* Pure red border */
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5), 0 0 15px rgba(255, 0, 0, 0.3); /* Red glow */
+    border: 1px solid rgba(255, 0, 0, 0.5); /* Red border */
     transition: all 0.3s ease;
     position: relative;
   }
   
   .formContainer:hover {
-    box-shadow: 0 12px 40px rgba(0, 0, 0, 0.8), 0 0 20px rgba(255, 0, 0, 0.6); /* Pure red glow */
+    box-shadow: 0 12px 40px rgba(0, 0, 0, 0.8), 0 0 20px rgba(255, 0, 0, 0.6); /* Brighter red glow on hover */
     transform: translateY(-5px);
   }
   
@@ -170,16 +108,16 @@
     position: fixed !important;
     top: 20px !important;
     right: 20px !important;
-    background: linear-gradient(135deg, rgba(170, 0, 0, 0.9), rgba(100, 0, 0, 0.9)); /* Dark reds, no violet */
+    background: linear-gradient(135deg, var(--primary-color), var(--secondary-color)); /* Red to Darker Red gradient */
     transition: all 0.3s ease;
     z-index: 1000;
     padding: 10px 20px;
     min-width: auto;
-    box-shadow: 0 0 15px rgba(255, 0, 0, 0.5), inset 0 1px 0 rgba(255, 255, 255, 0.2); /* Pure red glow */
+    box-shadow: 0 0 15px rgba(255, 0, 0, 0.5), inset 0 1px 0 rgba(255, 255, 255, 0.2); /* Red glow */
     border-radius: 8px;
     font-weight: bold;
     letter-spacing: 0.5px;
-    border: 1px solid rgba(255, 0, 0, 0.5); /* Pure red border */
+    border: 1px solid rgba(255, 0, 0, 0.5); /* Red border */
     display: flex;
     align-items: center;
     justify-content: center;
@@ -191,9 +129,9 @@
   }
   
   .logoutButton:hover {
-    background: linear-gradient(135deg, rgba(255, 0, 0, 1), rgba(180, 0, 0, 1)); /* Pure reds, no violet */
+    background: linear-gradient(135deg, var(--secondary-color), var(--primary-color)); /* Darker Red to Red gradient on hover */
     transform: translateY(-2px) scale(1.05);
-    box-shadow: 0 4px 20px rgba(255, 0, 0, 0.7), 0 0 0 1px rgba(255, 0, 0, 0.5), 0 0 30px rgba(255, 0, 0, 0.3); /* Pure red glow */
+    box-shadow: 0 4px 20px rgba(204, 0, 0, 0.7), 0 0 0 1px rgba(255, 0, 0, 0.5), 0 0 30px rgba(255, 0, 0, 0.3); /* Red glow */
     text-shadow: 0 0 5px rgba(255, 255, 255, 0.5);
   }
   
@@ -208,7 +146,7 @@
     display: flex;
     justify-content: space-between;
     margin-bottom: 1.5rem;
-    border-bottom: 1px solid rgba(255, 0, 0, 0.2); /* Pure red border */
+    border-bottom: 1px solid rgba(255, 0, 0, 0.2); /* Faint red border */
     padding-bottom: 0.5rem;
   }
   
@@ -223,18 +161,18 @@
     font-weight: 500;
     position: relative;
     overflow: hidden;
-    border-bottom: 1px solid rgba(255, 0, 0, 0.5); /* Pure red border */
+    border-bottom: 1px solid rgba(255, 0, 0, 0.5); /* Red border */
   }
   
   .tabButton:hover {
-    background: rgba(50, 0, 0, 0.6); /* Dark red, no violet */
+    background: rgba(255, 0, 0, 0.1); /* Faint red background */
     color: white;
   }
   
   .activeTab {
-    background: rgba(150, 0, 0, 0.8); /* Pure red, no violet */
-    color: white;
-    box-shadow: 0 0 10px rgba(255, 0, 0, 0.5); /* Pure red glow */
+    background: var(--primary-color); /* Solid red */
+    color: var(--foreground); /* Light text */
+    box-shadow: 0 0 10px rgba(255, 0, 0, 0.5); /* Red glow */
   }
   
   .activeTab::after {
@@ -244,7 +182,7 @@
     left: 0;
     width: 100%;
     height: 2px;
-    background: linear-gradient(to right, #ff3030, #aa2020); /* Pure reds, no violet */
+    background: linear-gradient(to right, var(--primary-color), var(--secondary-color)); /* Red to darker red gradient */
   }
   
   .formContent {
@@ -304,8 +242,8 @@
   
   .input {
     padding: 0.75rem 1rem;
-    background: rgba(30, 0, 0, 0.6); /* Dark red, not violet */
-    border: 1px solid rgba(255, 255, 255, 0.1);
+    background: rgba(25, 0, 0, 0.7); /* Dark red background, slightly transparent */
+    border: 1px solid rgba(255, 0, 0, 0.2); /* Faint red border */
     border-radius: 8px;
     color: white;
     font-size: 0.9rem;
@@ -315,9 +253,9 @@
   
   .input:focus {
     outline: none;
-    border-color: rgba(255, 0, 0, 0.7); /* Pure red border */
-    box-shadow: 0 0 0 2px rgba(255, 0, 0, 0.3), inset 0 0 8px rgba(255, 0, 0, 0.1); /* Pure red glow */
-    background: rgba(50, 0, 0, 0.7); /* Dark red, not violet */
+    border-color: var(--primary-color); /* Red border */
+    box-shadow: 0 0 0 2px rgba(255, 0, 0, 0.3), inset 0 0 8px rgba(255, 0, 0, 0.1); /* Red glow */
+    background: rgba(255, 0, 0, 0.1); /* Faint red background */
   }
   
   .input::placeholder {
@@ -336,8 +274,8 @@
     justify-content: center;
     gap: 0.5rem;
     padding: 0.75rem 1rem;
-    background: rgba(150, 0, 0, 0.8); /* Pure red, no violet */
-    color: white;
+    background: var(--primary-color); /* Red button */
+    color: var(--foreground); /* Light text on button */
     border: none;
     border-radius: 8px;
     cursor: pointer;
@@ -345,13 +283,13 @@
     font-weight: 500;
     position: relative;
     overflow: hidden;
-    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3), 0 0 0 1px rgba(255, 0, 0, 0.2); /* Pure red glow */
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3), 0 0 0 1px rgba(255, 0, 0, 0.2); /* Faint red glow */
     text-shadow: 0 1px 2px rgba(0, 0, 0, 0.5);
     min-width: 100px;
   }
   
   .button:hover {
-    background: rgba(220, 0, 0, 1); /* Pure red, no violet */
+    background: var(--secondary-color); /* Darker red on hover */
   }
   
   .button::before {
@@ -371,7 +309,9 @@
   }
   
   .button:hover {
-    background: rgba(220, 0, 0, 1); /* Pure red, no violet */
+    /* Keep hover consistent with above */
+    /* Keep hover consistent with above */
+    background: var(--secondary-color);
   }
   
   .button:hover::before {

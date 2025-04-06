@@ -1,4 +1,5 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
+// Removed Script import
 import { Play, Square, RefreshCw, LogOut } from 'lucide-react';
 import styles from '../styles/GalaxyControl.module.css';
 import { useRouter } from 'next/navigation';
@@ -29,6 +30,7 @@ type ActionType = keyof ButtonStates;
 const GalaxyForm: React.FC = () => {
   const router = useRouter();
   const [activeTab, setActiveTab] = useState<number>(1);
+  const [username, setUsername] = useState<string | null>(null);
   
   // Form names for each tab
   const formNames = {
@@ -45,6 +47,14 @@ const GalaxyForm: React.FC = () => {
     // Redirect to signin page
     router.push('/signin');
   };
+
+  useEffect(() => {
+    // Retrieve username from session storage on component mount
+    const storedUsername = sessionStorage.getItem('username'); // Assuming the key is 'username'
+    if (storedUsername) {
+      setUsername(storedUsername);
+    }
+  }, []);
   
   const [formData1, setFormData1] = useState<FormData>({
     RC: '',
@@ -351,9 +361,13 @@ const GalaxyForm: React.FC = () => {
   
   return (
     <div className={styles.container}>
-      <div className={styles.stars}></div>
-      <div className={styles.nebula}></div>
-      <button 
+      {username && (
+        <div style={{ position: 'absolute', top: '20px', left: '20px', color: 'var(--primary-color)', textShadow: '0 0 8px rgba(211, 47, 47, 0.6)', fontWeight: 'bold', zIndex: 10, fontSize: '1.1rem' }}> {/* Changed color to primary red */}
+          Welcome, {username}
+        </div>
+      )}
+      {/* Background elements removed for a cleaner look */}
+      <button
         onClick={handleLogout}
         className={`${styles.button} ${styles.logoutButton}`}
       >
@@ -384,6 +398,7 @@ const GalaxyForm: React.FC = () => {
         {renderForm(4)}
         {renderForm(5)}
       </div>
+      {/* Removed Tenor Embed divs and Script */}
     </div>
   );
 };

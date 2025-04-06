@@ -1,39 +1,95 @@
+@import url('https://fonts.googleapis.com/css2?family=Audiowide&family=Bungee&display=swap');
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
 :root {
-  --background: #1a1a1a;
-  --foreground: #f5f5f5;
-  --primary-color: #4a90e2;
-  --secondary-color: #50e3c2;
+  /* Black and Red Palette */
+  --background: #000000; /* Black */
+  --foreground: #f0f0f0; /* Off-white */
+  --primary-color: #D32F2F; /* Material Design Red 700 */
+  --secondary-color: #B71C1C; /* Material Design Red 900 */
 }
 
 @media (prefers-color-scheme: dark) {
   :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
+    /* Keep dark scheme consistent */
+    --background: #000000;
+    --foreground: #f0f0f0;
   }
 }
+
+/* Removed local @font-face for Geist Mono */
+
+@font-face {
+  font-family: 'Geist';
+  src: url('./fonts/GeistVF.woff') format('woff');
+  font-weight: 100 900;
+  font-style: normal;
+}
+
+/* Removed local @font-face for Geist */
 
 body {
   color: var(--foreground);
   background: var(--background);
-  font-family: Arial, Helvetica, sans-serif;
+  font-family: 'Audiowide', sans-serif; /* Use Audiowide as the default font */
 }
 
 button {
+  /* Use new accent colors for default buttons */
   background-color: var(--primary-color);
-  color: var(--foreground);
+  color: var(--foreground); /* Light text on red button */
   border: none;
   padding: 10px 20px;
   border-radius: 5px;
   cursor: pointer;
-  transition: background-color 0.3s;
+  transition: background-color 0.3s, transform 0.2s;
+  font-weight: bold;
+}
+/* Footer Styles */
+.app-footer {
+  position: fixed;
+  bottom: 10px;
+  left: 0;
+  width: 100%;
+  text-align: center;
+  font-size: 0.8rem; /* Small text */
+  color: rgba(240, 240, 240, 0.7); /* Slightly transparent white */
+  z-index: 100; /* Above fire GIFs */
+  pointer-events: none; /* Allow clicks through */
+  animation: footerGlow 4s ease-in-out infinite alternate;
+}
+
+.app-footer::before { /* Add a subtle red glow */
+  content: '';
+  position: absolute;
+  bottom: -5px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 150px;
+  height: 10px;
+  background: var(--primary-color);
+  filter: blur(15px);
+  opacity: 0.4;
+  border-radius: 50%;
+  animation: footerPulse 4s ease-in-out infinite alternate;
+}
+
+@keyframes footerGlow {
+  from { text-shadow: 0 0 3px rgba(211, 47, 47, 0.4); }
+  to { text-shadow: 0 0 8px rgba(211, 47, 47, 0.7); }
+}
+
+@keyframes footerPulse {
+  from { opacity: 0.3; transform: translateX(-50%) scale(0.8); }
+  to { opacity: 0.6; transform: translateX(-50%) scale(1.1); }
 }
 
 button:hover {
   background-color: var(--secondary-color);
+  transform: scale(1.05); /* Add slight scale effect on hover */
 }
 
 .logoutButton {

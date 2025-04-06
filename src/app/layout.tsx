@@ -29,6 +29,9 @@ export default function RootLayout({
         className={`${geistSans.variable} ${geistMono.variable} antialiased`}
       >
         {children}
+        <footer className="app-footer">
+          © {new Date().getFullYear()} | Created by THALA
+        </footer>
       </body>
     </html>
   );
