@@ -144,7 +144,10 @@
   /* Tab styles */
   .tabsContainer {
     display: flex;
-    justify-content: space-between;
+    justify-content: space-between; /* Spread tabs out again */
+    /* gap: 0.5rem; */ /* Remove fixed gap */
+    padding-left: 2rem; /* Add padding to reduce space for gaps */
+    padding-right: 2rem; /* Add padding to reduce space for gaps */
     margin-bottom: 1.5rem;
     border-bottom: 1px solid rgba(255, 0, 0, 0.2); /* Faint red border */
     padding-bottom: 0.5rem;

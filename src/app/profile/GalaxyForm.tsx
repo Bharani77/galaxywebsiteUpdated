@@ -1,6 +1,5 @@
 import React, { useState, useEffect } from 'react';
-// Removed Script import
-import { Play, Square, RefreshCw, LogOut } from 'lucide-react';
+import { Play, Square, RefreshCw, LogOut, CheckCircle } from 'lucide-react';
 import styles from '../styles/GalaxyControl.module.css';
 import { useRouter } from 'next/navigation';
 
@@ -31,30 +30,136 @@ const GalaxyForm: React.FC = () => {
   const router = useRouter();
   const [activeTab, setActiveTab] = useState<number>(1);
   const [username, setUsername] = useState<string | null>(null);
+  const [showDeployPopup, setShowDeployPopup] = useState<boolean>(false);
+  const [isDeploying, setIsDeploying] = useState<boolean>(false);
+  const [isUndeploying, setIsUndeploying] = useState<boolean>(false);
+  const [deploymentStatus, setDeploymentStatus] = useState<string>('');
+  const [isDeployed, setIsDeployed] = useState<boolean>(false);
+  const [isCheckingStatus, setIsCheckingStatus] = useState<boolean>(true);
+  const [showThankYouMessage, setShowThankYouMessage] = useState<boolean>(false);
   
-  // Form names for each tab
   const formNames = {
-    1: 'Nebula Control',
-    2: 'Star Fleet',
-    3: 'Dark Matter',
-    4: 'Quantum Void',
-    5: 'Solar Dominion'
+    1: 'Kick 1',
+    2: 'Kick 2',
+    3: 'Kick 3',
+    4: 'Kick 4',
+    5: 'Kick 5'
   };
   
   const handleLogout = () => {
-    // Clear session storage
     sessionStorage.clear();
-    // Redirect to signin page
     router.push('/signin');
   };
 
   useEffect(() => {
-    // Retrieve username from session storage on component mount
-    const storedUsername = sessionStorage.getItem('username'); // Assuming the key is 'username'
+    const storedUsername = sessionStorage.getItem('username');
     if (storedUsername) {
       setUsername(storedUsername);
+      checkDeploymentStatus(storedUsername);
+    } else {
+      setIsCheckingStatus(false);
     }
   }, []);
+
+  const checkDeploymentStatus = async (username: string) => {
+    setIsCheckingStatus(true);
+    let isAlreadyDeployed = false;
+    
+    try {
+      const response = await fetch('https://buddymaster77hugs-gradio.hf.space/api/status', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          modal_name: username
+        })
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        if (data.status === "deployed") {
+          isAlreadyDeployed = true;
+          setIsDeployed(true);
+        }
+      }
+    } catch (error) {
+      console.error("Error checking deployment status:", error);
+    } finally {
+      setIsCheckingStatus(false);
+      setShowDeployPopup(!isAlreadyDeployed);
+    }
+  };
+
+  const handleUndeploy = async () => {
+    if (!username) {
+      alert('Username not found. Please log in again.');
+      return;
+    }
+
+    setIsUndeploying(true);
+    
+    try {
+      const response = await fetch('https://buddymaster77hugs-gradio.hf.space/api/undeploy', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          modal_name: username
+        })
+      });
+
+      if (response.ok) {
+        setIsDeployed(false);
+        setShowThankYouMessage(true);
+      } else {
+        const errorData = await response.json();
+        alert(`Undeployment failed: ${errorData.message || 'Unknown error'}`);
+      }
+    } catch (error) {
+      alert(`Undeployment error: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    } finally {
+      setIsUndeploying(false);
+    }
+  };
+
+  const handleDeploy = async () => {
+    if (!username) {
+      alert('Username not found. Please log in again.');
+      return;
+    }
+
+    setIsDeploying(true);
+    
+    try {
+      const response = await fetch('https://buddymaster77hugs-gradio.hf.space/api/deploy', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          repo_url: 'https://github.com/Bharani77/Modal.git',
+          modal_name: username
+        })
+      });
+
+      if (response.ok) {
+        setDeploymentStatus('Successfully deployed');
+        setIsDeployed(true);
+        setTimeout(() => {
+          setShowDeployPopup(false);
+        }, 2000);
+      } else {
+        const errorData = await response.json();
+        setDeploymentStatus(`Deployment failed: ${errorData.message || 'Unknown error'}`);
+      }
+    } catch (error) {
+      setDeploymentStatus(`Deployment error: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    } finally {
+      setIsDeploying(false);
+    }
+  };
   
   const [formData1, setFormData1] = useState<FormData>({
     RC: '',
@@ -141,7 +246,6 @@ const GalaxyForm: React.FC = () => {
     const { name, value } = e.target;
     const timeFields = ['AttackTime', 'IntervalTime', 'DefenceTime'];
     
-    // For time fields, only allow up to 5 digits
     if (timeFields.includes(name)) {
       const numericValue = value.replace(/\D/g, '').slice(0, 5);
       switch(formNumber) {
@@ -223,13 +327,12 @@ const GalaxyForm: React.FC = () => {
     setError('');
   
     try {
-      // Modify the form data to append the form number to each field
       const modifiedFormData = Object.entries(formData).reduce((acc, [key, value]) => {
         acc[`${key}${formNumber}`] = value;
         return acc;
       }, {} as Record<string, string>);
   
-      const response = await fetch(`https://bharani77--web-web-app.modal.run/${action}/${formNumber}`, {
+      const response = await fetch(`https://bharani77--${username}-web-app.modal.run/${action}/${formNumber}`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json'
@@ -359,24 +462,213 @@ const GalaxyForm: React.FC = () => {
     );
   };
   
+  const renderStatusButton = () => {
+    if (isCheckingStatus) {
+      return (
+        <button
+          className={`${styles.button} ${styles.logoutButton}`}
+          disabled={true}
+        >
+          <span>Checking...</span>
+        </button>
+      );
+    } else if (isDeployed) {
+      return (
+        <button
+          onClick={handleUndeploy}
+          disabled={isUndeploying}
+          className={`${styles.button} ${styles.logoutButton}`}
+        >
+          {isUndeploying ? (
+            <span>Undeploying...</span>
+          ) : (
+            <>
+              <CheckCircle size={16} />
+              <span>Deployed</span>
+            </>
+          )}
+        </button>
+      );
+    } else {
+      return (
+        <button
+          onClick={() => setShowDeployPopup(true)}
+          className={`${styles.button} ${styles.logoutButton}`}
+        >
+          <span>Deploy</span>
+        </button>
+      );
+    }
+  };
+  
   return (
     <div className={styles.container}>
-      {username && (
-        <div style={{ position: 'absolute', top: '20px', left: '20px', color: 'var(--primary-color)', textShadow: '0 0 8px rgba(211, 47, 47, 0.6)', fontWeight: 'bold', zIndex: 10, fontSize: '1.1rem' }}> {/* Changed color to primary red */}
-          Welcome, {username}
+      {/* Top navigation bar with buttons - Modified section */}
+      <div style={{ 
+        position: 'absolute', 
+        top: '0', 
+        left: '0', 
+        width: '100%', 
+        display: 'flex', 
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        padding: '10px 20px',
+        background: 'rgba(0, 0, 0, 0.3)',
+        boxSizing: 'border-box',
+        zIndex: 1000
+      }}>
+        <div style={{ 
+          display: 'flex', 
+          alignItems: 'center', 
+          gap: '20px',
+          flexShrink: 0,
+          marginRight: '20px' // Added margin to prevent overlap
+        }}>
+          {username && (
+            <div style={{ 
+              color: 'var(--primary-color)', 
+              textShadow: '0 0 8px rgba(211, 47, 47, 0.6)', 
+              fontWeight: 'bold', 
+              fontSize: '1.1rem',
+              flexShrink: 0 // Prevent text wrapping
+            }}>
+              Welcome, {username}
+            </div>
+          )}
+          <div style={{ position: 'relative', zIndex: 1001 }}>
+            {renderStatusButton()}
+          </div>
+        </div>
+        
+        <button
+          onClick={handleLogout}
+          className={`${styles.button} ${styles.logoutButton}`}
+          style={{ 
+            marginLeft: 'auto', // Ensure it stays on far right
+            flexShrink: 0,
+            position: 'relative',
+            zIndex: 1001
+          }}
+        >
+          <LogOut size={16} />
+          <span>Logout</span>
+        </button>
+      </div>
+      
+      {/* Deploy Popup */}
+      {showDeployPopup && (
+        <div style={{
+          position: 'fixed',
+          top: 0,
+          left: 0,
+          width: '100%',
+          height: '100%',
+          backgroundColor: 'rgba(0, 0, 0, 0.7)',
+          display: 'flex',
+          justifyContent: 'center',
+          alignItems: 'center',
+          zIndex: 1000
+        }}>
+          <div style={{
+            backgroundColor: '#1a1a1a',
+            borderRadius: '8px',
+            padding: '20px',
+            width: '300px',
+            boxShadow: '0 4px 20px rgba(0, 0, 0, 0.5)',
+            border: '1px solid #333'
+          }}>
+            <h2 style={{ color: '#fff', marginBottom: '20px', textAlign: 'center' }}>Deploy KickLock</h2>
+            <p style={{ color: '#aaa', marginBottom: '20px', textAlign: 'center', fontSize: '0.9rem' }}>
+              Deployment is required to use KickLock features
+            </p>
+            
+            {deploymentStatus && (
+              <div style={{
+                marginBottom: '15px',
+                padding: '10px',
+                borderRadius: '4px',
+                backgroundColor: isDeployed ? 'rgba(34, 197, 94, 0.2)' : 'rgba(239, 68, 68, 0.2)',
+                color: isDeployed ? '#22c55e' : '#ef4444',
+                textAlign: 'center'
+              }}>
+                {deploymentStatus}
+              </div>
+            )}
+            
+            <div style={{ display: 'flex', justifyContent: 'center' }}>
+              <button
+                onClick={handleDeploy}
+                disabled={isDeploying || isDeployed}
+                style={{
+                  padding: '10px 20px',
+                  borderRadius: '4px',
+                  border: 'none',
+                  backgroundColor: isDeployed ? '#22c55e' : '#d32f2f',
+                  color: 'white',
+                  fontWeight: 'bold',
+                  cursor: isDeploying || isDeployed ? 'not-allowed' : 'pointer',
+                  opacity: isDeploying ? 0.7 : 1,
+                  transition: 'all 0.3s ease',
+                  width: '100%'
+                }}
+              >
+                {isDeploying ? 'Deploying...' : isDeployed ? 'Deployed' : 'Deploy KickLock'}
+              </button>
+            </div>
+          </div>
         </div>
       )}
-      {/* Background elements removed for a cleaner look */}
-      <button
-        onClick={handleLogout}
-        className={`${styles.button} ${styles.logoutButton}`}
-      >
-        <LogOut size={16} />
-        <span>Logout</span>
-      </button>
+      
+      {/* Thank You Message */}
+      {showThankYouMessage && (
+        <div style={{
+          position: 'fixed',
+          top: 0,
+          left: 0,
+          width: '100%',
+          height: '100%',
+          backgroundColor: 'rgba(0, 0, 0, 0.7)',
+          display: 'flex',
+          justifyContent: 'center',
+          alignItems: 'center',
+          zIndex: 1000
+        }}>
+          <div style={{
+            backgroundColor: '#1a1a1a',
+            borderRadius: '8px',
+            padding: '20px',
+            width: '300px',
+            boxShadow: '0 4px 20px rgba(0, 0, 0, 0.5)',
+            border: '1px solid #333'
+          }}>
+            <h2 style={{ color: '#fff', marginBottom: '20px', textAlign: 'center' }}>Thank You for using KickLock</h2>
+            
+            <div style={{ display: 'flex', justifyContent: 'center' }}>
+              <button
+                onClick={async () => {
+                  setShowThankYouMessage(false);
+                  await handleDeploy();
+                }}
+                style={{
+                  padding: '10px 20px',
+                  borderRadius: '4px',
+                  border: 'none',
+                  backgroundColor: '#d32f2f',
+                  color: 'white',
+                  fontWeight: 'bold',
+                  cursor: 'pointer',
+                  width: '100%'
+                }}
+              >
+                Deploy Again
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
       
       <h1 className={styles.title}>
-        <span className={styles.kickLock}>KICK ~ LOCK</span> 
+        <span className={styles.kickLock}>KICK ~ LOCK</span>
       </h1>
       
       <div className={styles.formContainer}>
@@ -398,7 +690,6 @@ const GalaxyForm: React.FC = () => {
         {renderForm(4)}
         {renderForm(5)}
       </div>
-      {/* Removed Tenor Embed divs and Script */}
     </div>
   );
 };
