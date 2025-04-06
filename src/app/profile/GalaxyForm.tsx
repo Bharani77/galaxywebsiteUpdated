@@ -46,7 +46,40 @@ const GalaxyForm: React.FC = () => {
     5: 'Kick 5'
   };
   
-  const handleLogout = () => {
+  const handleLogout = async () => {
+    if (isDeployed) {
+      try {
+        setIsUndeploying(true);
+        const response = await fetch('https://buddymaster77hugs-gradio.hf.space/api/undeploy', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({
+            modal_name: username
+          })
+        });
+  
+        if (!response.ok) {
+          const errorData = await response.json();
+          alert(`Undeployment failed: ${errorData.message || 'Unknown error'}`);
+          return;
+        }
+        
+        // Set deployment state to false before logout
+        setIsDeployed(false);
+        // Clear any deployment related states
+        setDeploymentStatus('');
+        setShowDeployPopup(false);
+        setShowThankYouMessage(false);
+      } catch (error) {
+        alert(`Undeployment error: ${error instanceof Error ? error.message : 'Unknown error'}`);
+        return;
+      } finally {
+        setIsUndeploying(false);
+      }
+    }
+    
     sessionStorage.clear();
     router.push('/signin');
   };
@@ -423,7 +456,7 @@ const GalaxyForm: React.FC = () => {
             />
           ))}
           
-          <div className={styles.buttonGroup}>
+          <div className={styles.buttonGroup} style={{ gap: '8px', display: 'flex', flexWrap: 'wrap' }}>
             <button
               type="button"
               onClick={() => handleAction(formNumber)('start')}
@@ -456,6 +489,8 @@ const GalaxyForm: React.FC = () => {
               <RefreshCw size={16} />
               <span>Update</span>
             </button>
+
+            {renderStatusButton()}
           </div>
         </div>
       </div>
@@ -466,9 +501,14 @@ const GalaxyForm: React.FC = () => {
     if (isCheckingStatus) {
       return (
         <button
-          className={`${styles.button} ${styles.logoutButton}`}
+          className={`${styles.button}`}
           disabled={true}
+          style={{ 
+            minWidth: '120px',
+            backgroundColor: '#666' // Gray for checking state
+          }}
         >
+          <RefreshCw size={16} />
           <span>Checking...</span>
         </button>
       );
@@ -477,10 +517,18 @@ const GalaxyForm: React.FC = () => {
         <button
           onClick={handleUndeploy}
           disabled={isUndeploying}
-          className={`${styles.button} ${styles.logoutButton}`}
+          className={`${styles.button}`}
+          style={{ 
+            minWidth: '120px',
+            backgroundColor: '#22c55e', // Green for deployed state
+            border: 'none'
+          }}
         >
           {isUndeploying ? (
-            <span>Undeploying...</span>
+            <>
+              <RefreshCw size={16} />
+              <span>Undeploying...</span>
+            </>
           ) : (
             <>
               <CheckCircle size={16} />
@@ -493,8 +541,14 @@ const GalaxyForm: React.FC = () => {
       return (
         <button
           onClick={() => setShowDeployPopup(true)}
-          className={`${styles.button} ${styles.logoutButton}`}
+          className={`${styles.button}`}
+          style={{ 
+            minWidth: '120px',
+            backgroundColor: '#dc2626', // Red for undeployed state
+            border: 'none'
+          }}
         >
+          <RefreshCw size={16} />
           <span>Deploy</span>
         </button>
       );
@@ -503,58 +557,69 @@ const GalaxyForm: React.FC = () => {
   
   return (
     <div className={styles.container}>
-      {/* Top navigation bar with buttons - Modified section */}
-      <div style={{ 
-        position: 'absolute', 
-        top: '0', 
-        left: '0', 
-        width: '100%', 
-        display: 'flex', 
+      <div className={styles.header} style={{
+        display: 'flex',
+        alignItems: 'flex-start', // Changed from center to flex-start
         justifyContent: 'space-between',
-        alignItems: 'center',
-        padding: '10px 20px',
-        background: 'rgba(0, 0, 0, 0.3)',
-        boxSizing: 'border-box',
-        zIndex: 1000
+        padding: '0px',
+        backgroundColor: '#1a1a1a',
+        borderRadius: '0px',
+        margin: '0 0 20px 0',
+        position: 'relative' // Added position relative
       }}>
-        <div style={{ 
-          display: 'flex', 
-          alignItems: 'center', 
-          gap: '20px',
-          flexShrink: 0,
-          marginRight: '20px' // Added margin to prevent overlap
-        }}>
-          {username && (
-            <div style={{ 
-              color: 'var(--primary-color)', 
-              textShadow: '0 0 8px rgba(211, 47, 47, 0.6)', 
-              fontWeight: 'bold', 
-              fontSize: '1.1rem',
-              flexShrink: 0 // Prevent text wrapping
-            }}>
-              Welcome, {username}
-            </div>
-          )}
-          <div style={{ position: 'relative', zIndex: 1001 }}>
-            {renderStatusButton()}
+        {username && (
+          <div style={{
+            color: '#fff',
+            fontWeight: 'bold', 
+            fontSize: '1.1rem',
+            position: 'absolute', // Added absolute positioning
+            left: '-625px',
+            top: '-15px',
+            display: 'flex',
+            alignItems: 'center'
+          }}>
+            <span style={{ marginRight: '4px' }}>Welcome:</span>
+            <span>{username}</span>
           </div>
+        )}
+
+        <div style={{ marginLeft: 'auto' }}> {/* Added container for logout button */}
+          <button
+            onClick={handleLogout}
+            className={`${styles.button} ${styles.logoutButton}`}
+          >
+            <LogOut size={16} />
+            <span>Logout</span>
+          </button>
+        </div>
+      </div>
+
+      <h1 className={styles.title}>
+        <span className={styles.kickLock}>KICK ~ LOCK</span>
+      </h1>
+      
+      <div className={styles.formContainer}>
+        <div className={styles.tabsContainer}>
+          {[1, 2, 3, 4, 5].map(num => (
+            <button
+              key={num}
+              className={`${styles.tabButton} ${activeTab === num ? styles.activeTab : ''}`}
+              onClick={() => setActiveTab(num)}
+            >
+              {formNames[num as keyof typeof formNames]}
+            </button>
+          ))}
         </div>
         
-        <button
-          onClick={handleLogout}
-          className={`${styles.button} ${styles.logoutButton}`}
-          style={{ 
-            marginLeft: 'auto', // Ensure it stays on far right
-            flexShrink: 0,
-            position: 'relative',
-            zIndex: 1001
-          }}
-        >
-          <LogOut size={16} />
-          <span>Logout</span>
-        </button>
+        {renderForm(1)}
+        {renderForm(2)}
+        {renderForm(3)}
+        {renderForm(4)}
+        {renderForm(5)}
       </div>
-      
+
+      {/* Remove the deploy button section that was here */}
+
       {/* Deploy Popup */}
       {showDeployPopup && (
         <div style={{
@@ -581,19 +646,6 @@ const GalaxyForm: React.FC = () => {
             <p style={{ color: '#aaa', marginBottom: '20px', textAlign: 'center', fontSize: '0.9rem' }}>
               Deployment is required to use KickLock features
             </p>
-            
-            {deploymentStatus && (
-              <div style={{
-                marginBottom: '15px',
-                padding: '10px',
-                borderRadius: '4px',
-                backgroundColor: isDeployed ? 'rgba(34, 197, 94, 0.2)' : 'rgba(239, 68, 68, 0.2)',
-                color: isDeployed ? '#22c55e' : '#ef4444',
-                textAlign: 'center'
-              }}>
-                {deploymentStatus}
-              </div>
-            )}
             
             <div style={{ display: 'flex', justifyContent: 'center' }}>
               <button
@@ -666,30 +718,6 @@ const GalaxyForm: React.FC = () => {
           </div>
         </div>
       )}
-      
-      <h1 className={styles.title}>
-        <span className={styles.kickLock}>KICK ~ LOCK</span>
-      </h1>
-      
-      <div className={styles.formContainer}>
-        <div className={styles.tabsContainer}>
-          {[1, 2, 3, 4, 5].map(num => (
-            <button
-              key={num}
-              className={`${styles.tabButton} ${activeTab === num ? styles.activeTab : ''}`}
-              onClick={() => setActiveTab(num)}
-            >
-              {formNames[num as keyof typeof formNames]}
-            </button>
-          ))}
-        </div>
-        
-        {renderForm(1)}
-        {renderForm(2)}
-        {renderForm(3)}
-        {renderForm(4)}
-        {renderForm(5)}
-      </div>
     </div>
   );
 };
