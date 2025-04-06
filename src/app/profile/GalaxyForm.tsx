@@ -379,16 +379,30 @@ const GalaxyForm: React.FC = () => {
           [action]: { 
             loading: false, 
             active: true, 
-            text: action === 'start' ? 'Running' : action === 'stop' ? 'Stopped' : 'Updated'
+            text: action === 'start' ? 'Running' : action === 'stop' ? 'Stopped' : 'Updated',
           },
-          ...(action === 'start' ? { stop: { ...prev.stop, active: false, text: 'Stop' } } : {}),
-          ...(action === 'stop' ? { start: { ...prev.start, active: false, text: 'Start' } } : {})
+          ...(action === 'start' ? { 
+            stop: { ...prev.stop, active: false, text: 'Stop' },
+          } : {}),
+          ...(action === 'stop' ? { 
+            start: { ...prev.start, active: false, text: 'Start' },
+          } : {})
         }));
+        setError(''); // Clear any existing errors
       } else {
-        throw new Error(`Failed to ${action} galaxy`);
+        // Simplified error message
+        if (action === 'start') {
+          setError('Unable to start - Please try again');
+        } else {
+          setError(`Unable to ${action} - Please try again`);
+        }
+        setButtonStates(prev => ({
+          ...prev,
+          [action]: { ...prev[action], loading: false, active: false, text: action }
+        }));
       }
     } catch (error) {
-      setError(`Error: ${error instanceof Error ? error.message : 'Unknown error'}`);
+      setError(`Unable to ${action} - Please try again`);
       setButtonStates(prev => ({
         ...prev,
         [action]: { ...prev[action], loading: false, active: false, text: action }
@@ -463,6 +477,9 @@ const GalaxyForm: React.FC = () => {
               className={`${styles.button} ${buttonStates.start.loading ? styles.loadingButton : ''} 
                 ${buttonStates.start.active ? styles.buttonRunning : ''}`}
               disabled={buttonStates.start.loading}
+              style={{ 
+                backgroundColor: buttonStates.start.active ? '#22c55e' : undefined
+              }}
             >
               <Play size={16} />
               <span>Start</span>
