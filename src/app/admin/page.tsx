@@ -104,8 +104,8 @@ export default function AdminLoginPage() {
     // Show loading state while checking session
     if (loading) {
         return (
-            <div className="min-h-screen bg-gray-900 text-white flex flex-col items-center justify-center">
-                <div className="bg-gray-800 p-8 rounded-lg shadow-md w-96 text-center">
+            <div className="welcome-container">
+                <div className="auth-card">
                     <p>Loading...</p>
                 </div>
             </div>
@@ -113,70 +113,61 @@ export default function AdminLoginPage() {
     }
 
     return (
-        <div className="min-h-screen bg-gray-900 text-white flex flex-col items-center justify-center">
-            <div className="bg-gray-800 p-8 rounded-lg shadow-md w-96">
-                <h2 className="text-2xl font-bold mb-4 text-center">
-                    Admin Login
-                </h2>
-                <form onSubmit={handleSubmit}>
-                    <div className="mb-4">
-                        <label
-                            htmlFor="username"
-                            className="block text-gray-400 text-sm font-bold mb-2"
-                        >
+        <div className="welcome-container">
+            <div className="auth-card max-w-md w-full p-8">
+                <h1 className="text-center mb-8">
+                    <span style={{ 
+                        color: '#D32F2F',
+                        fontFamily: 'Audiowide, cursive',
+                        fontSize: '2rem',
+                        textShadow: '0 0 10px rgba(211, 47, 47, 0.3)'
+                    }}>
+                        KICK ~ LOCK ADMIN
+                    </span>
+                </h1>
+                <form onSubmit={handleSubmit} className="space-y-6">
+                    <div className="form-group">
+                        <label className="block text-white text-sm font-semibold mb-2 text-left w-full">
                             Username
                         </label>
                         <input
                             type="text"
                             id="username"
-                            className="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline"
+                            className="input-field"
                             value={username}
                             onChange={(e) => setUsername(e.target.value)}
+                            placeholder="Enter admin username"
                         />
                     </div>
-                    <div className="mb-6">
-                        <label
-                            htmlFor="password"
-                            className="block text-gray-400 text-sm font-bold mb-2"
-                        >
+                    <div className="form-group">
+                        <label className="block text-white text-sm font-semibold mb-2 text-left w-full">
                             Password
                         </label>
                         <input
                             type="password"
                             id="password"
-                            className="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline"
+                            className="input-field"
                             value={password}
                             onChange={(e) => setPassword(e.target.value)}
+                            placeholder="Enter admin password"
                         />
                     </div>
                     <button
                         type="submit"
-                        className="bg-purple-500 hover:bg-purple-700 text-white font-bold py-2 px-4 rounded focus:outline-none focus:shadow-outline"
+                        className="welcome-button w-full mt-6"
                     >
                         Sign In
                     </button>
                 </form>
                 {error && (
-                    <div className="text-red-500 text-sm mt-2">
+                    <div className="error-message mt-4">
                         {error}
                     </div>
                 )}
-                <div className="mt-4 text-center">
-                    <p className="text-gray-400 text-sm">
-                        Not an admin?{" "}
-                        <Link
-                            href="/"
-                            className="text-purple-500 hover:underline"
-                        >
-                            Go back to the main page
-                        </Link>
-                    </p>
-                </div>
-                <div className="mt-4 text-center">
-                    <p className="text-gray-400 text-sm">
-                        Forgot Password?{" "}
-                        {/* Add a link for password reset here */}
-                    </p>
+                <div className="mt-6 text-center">
+                    <Link href="/" className="text-primary-color hover:text-secondary-color transition-colors">
+                        Return to Main Page
+                    </Link>
                 </div>
             </div>
         </div>

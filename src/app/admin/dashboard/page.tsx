@@ -603,99 +603,103 @@ export default function AdminDashboardPage() {
     };
 
     return (
-        <div className="min-h-screen bg-gray-900 text-white p-4">
-            <div className="max-w-7xl mx-auto">
-                {/* Add logout button at the top */}
-                <div className="flex justify-between mb-4 items-center">
-                    <div className="text-xl font-semibold">
-                        Welcome, {adminName || 'Admin'}
+        <div className="welcome-container">
+            <div className="auth-card max-w-7xl w-full p-8">
+                <div className="flex justify-between mb-8 items-center">
+                    <h1 className="text-center">
+                        <span style={{ 
+                            color: '#D32F2F',
+                            fontFamily: 'Audiowide, cursive',
+                            fontSize: '2rem',
+                            textShadow: '0 0 10px rgba(211, 47, 47, 0.3)'
+                        }}>
+                            KICK ~ LOCK ADMIN
+                        </span>
+                    </h1>
+                    <div className="flex items-center gap-4">
+                        <span className="text-white">Welcome, {adminName || 'Admin'}</span>
+                        <button
+                            onClick={handleLogout}
+                            className="welcome-button"
+                        >
+                            Logout
+                        </button>
                     </div>
-                    <button
-                        onClick={handleLogout}
-                        className="bg-red-600 hover:bg-red-700 text-white font-bold py-2 px-4 rounded focus:outline-none focus:shadow-outline"
-                    >
-                        Logout
-                    </button>
                 </div>
-                
-                <h2 className="text-2xl font-bold mb-6 text-center">Admin Dashboard - Token Generator</h2>
 
-                {/* Toast Notification */}
-                {toastMessage && (
-                    <div className="fixed bottom-4 right-4 bg-green-600 text-white px-4 py-2 rounded-lg shadow-lg">
-                        {toastMessage}
-                    </div>
-                )}
+                {/* Token Generator Section */}
+                <div className="bg-[#1a1a1a] rounded-lg p-6 mb-8">
+                    <h3 className="text-xl text-white font-bold mb-4">Token Generator</h3>
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                        {Object.keys(tokens).map((duration) => (
+                            <div key={duration} className="bg-[#2d2d2d] p-6 rounded-lg">
+                                <h3 className="text-lg font-bold mb-4">
+                                    {duration.charAt(0).toUpperCase() + duration.slice(1)} Token
+                                </h3>
+                                <div className="bg-gray-700 p-3 rounded mb-4 break-all flex items-center justify-between">
+                                    <span className="text-sm font-mono flex-1 truncate mr-2">
+                                        {tokens[duration] ? tokens[duration] : 'No active token'}
+                                    </span>
+                                    <span className={`text-xs ${tokens[duration] ? 'text-green-500' : 'text-gray-400'}`}>
+                                        {tokens[duration] ? 'Active' : ''}
+                                    </span>
+                                </div>
 
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                    {Object.keys(tokens).map((duration) => (
-                        <div key={duration} className="bg-gray-800 p-6 rounded-lg">
-                            <h3 className="text-lg font-bold mb-4">
-                                {duration.charAt(0).toUpperCase() + duration.slice(1)} Token
-                            </h3>
-                            <div className="bg-gray-700 p-3 rounded mb-4 break-all flex items-center justify-between">
-                                <span className="text-sm font-mono flex-1 truncate mr-2">
-                                    {tokens[duration] ? tokens[duration] : 'No active token'}
-                                </span>
-                                <span className={`text-xs ${tokens[duration] ? 'text-green-500' : 'text-gray-400'}`}>
-                                    {tokens[duration] ? 'Active' : ''}
-                                </span>
-                            </div>
+                                <button
+                                    className={`w-full py-2 px-4 rounded font-semibold ${
+                                        isLoading[duration] ? 'bg-purple-700 cursor-not-allowed' : 'bg-purple-600 hover:bg-purple-700'
+                                    }`}
+                                    onClick={() => generateToken(duration)}
+                                    disabled={isLoading[duration]}
+                                >
+                                    {isLoading[duration] ? 'Generating...' : 'Generate Token'}
+                                </button>
 
-                            <button
-                                className={`w-full py-2 px-4 rounded font-semibold ${
-                                    isLoading[duration] ? 'bg-purple-700 cursor-not-allowed' : 'bg-purple-600 hover:bg-purple-700'
-                                }`}
-                                onClick={() => generateToken(duration)}
-                                disabled={isLoading[duration]}
-                            >
-                                {isLoading[duration] ? 'Generating...' : 'Generate Token'}
-                            </button>
-
-                            {/* Token History */}
-                            <div className="mt-4">
-                                <h4 className="text-sm font-bold mb-2">Token History</h4>
-                                <div className="max-h-40 overflow-y-auto scrollbar-thin scrollbar-thumb-purple-600 scrollbar-track-gray-700 scrollbar-rounded">
-                                    {tokenHistory[duration].map((item, index) => (
-                                        <div key={index} className="bg-gray-700 p-2 rounded mb-2 text-sm flex justify-between items-center">
-                                            <div className="flex-1 truncate mr-2">
-                                                <span className="font-mono">{item.token}</span>
-                                                <span className={`ml-2 ${item.status === 'Active' ? 'text-green-500' : item.status === 'InUse' ? 'text-red-500' : 'text-gray-400'}`}>
-                                                    {item.status}
-                                                </span>
-                                            </div>
-                                            <div className="flex items-center gap-2">
-                                                <button
-                                                    onClick={() => copyTokenToClipboard(item.token)}
-                                                    className="text-blue-500 hover:text-blue-700 px-2 py-1 rounded"
-                                                >
-                                                    Copy
-                                                </button>
-                                                {item.status === 'Active' && (
+                                {/* Token History */}
+                                <div className="mt-4">
+                                    <h4 className="text-sm font-bold mb-2">Token History</h4>
+                                    <div className="max-h-40 overflow-y-auto scrollbar-thin scrollbar-thumb-purple-600 scrollbar-track-gray-700 scrollbar-rounded">
+                                        {tokenHistory[duration].map((item, index) => (
+                                            <div key={index} className="bg-gray-700 p-2 rounded mb-2 text-sm flex justify-between items-center">
+                                                <div className="flex-1 truncate mr-2">
+                                                    <span className="font-mono">{item.token}</span>
+                                                    <span className={`ml-2 ${item.status === 'Active' ? 'text-green-500' : item.status === 'InUse' ? 'text-red-500' : 'text-gray-400'}`}>
+                                                        {item.status}
+                                                    </span>
+                                                </div>
+                                                <div className="flex items-center gap-2">
                                                     <button
-                                                        onClick={() => handleDeleteToken(item.id, duration)}
-                                                        disabled={isDeletingToken[duration][item.id] || false}
-                                                        className={`text-red-500 hover:text-red-700 px-2 py-1 rounded ${
-                                                            isDeletingToken[duration][item.id] ? 'opacity-50 cursor-not-allowed' : ''
-                                                        }`}
+                                                        onClick={() => copyTokenToClipboard(item.token)}
+                                                        className="text-blue-500 hover:text-blue-700 px-2 py-1 rounded"
                                                     >
-                                                        {isDeletingToken[duration][item.id] ? 'Deleting...' : 'Delete'}
+                                                        Copy
                                                     </button>
-                                                )}
+                                                    {item.status === 'Active' && (
+                                                        <button
+                                                            onClick={() => handleDeleteToken(item.id, duration)}
+                                                            disabled={isDeletingToken[duration][item.id] || false}
+                                                            className={`text-red-500 hover:text-red-700 px-2 py-1 rounded ${
+                                                                isDeletingToken[duration][item.id] ? 'opacity-50 cursor-not-allowed' : ''
+                                                            }`}
+                                                        >
+                                                            {isDeletingToken[duration][item.id] ? 'Deleting...' : 'Delete'}
+                                                        </button>
+                                                    )}
+                                                </div>
                                             </div>
-                                        </div>
-                                    ))}
+                                        ))}
+                                    </div>
                                 </div>
                             </div>
-                        </div>
-                    ))}
+                        ))}
+                    </div>
                 </div>
 
                 {/* Token User Details */}
-                <div className="mt-8">
-                    <h3 className="text-xl font-bold mb-4">Token User Details</h3>
-                    <div className="bg-gray-800 p-6 rounded-lg overflow-x-auto">
-                        <table className="w-full table-auto border border-gray-600">
+                <div className="bg-[#1a1a1a] rounded-lg p-6">
+                    <h3 className="text-xl text-white font-bold mb-4">Token User Details</h3>
+                    <div className="overflow-x-auto">
+                        <table className="w-full table-auto border-collapse">
                             <thead>
                                 <tr className="bg-gray-700">
                                     <th className="px-4 py-2 min-w-[200px] text-left">Token</th>
@@ -775,72 +779,78 @@ export default function AdminDashboardPage() {
                         </table>
                     </div>
                 </div>
+
+                {/* Modals with updated styling */}
+                {isRenewModalOpen && (
+                    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center">
+                        <div className="bg-[#1a1a1a] p-6 rounded-lg w-96">
+                            <h3 className="text-lg font-bold mb-4">Renew Token</h3>
+                            <label className="block mb-4">
+                                <span className="text-sm font-semibold">Select Duration:</span>
+                                <select
+                                    value={selectedDuration}
+                                    onChange={(e) => setSelectedDuration(e.target.value)}
+                                    className="w-full p-2 bg-gray-700 rounded mt-1"
+                                >
+                                    <option value="3month">3 Months</option>
+                                    <option value="6month">6 Months</option>
+                                    <option value="1year">1 Year</option>
+                                </select>
+                            </label>
+                            <div className="flex justify-end gap-2">
+                                <button
+                                    onClick={closeRenewModal}
+                                    className="bg-gray-600 hover:bg-gray-700 px-4 py-2 rounded"
+                                >
+                                    Cancel
+                                </button>
+                                <button
+                                    onClick={handleRenewToken}
+                                    className="bg-blue-600 hover:bg-blue-700 px-4 py-2 rounded"
+                                >
+                                    Renew
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                )}
+
+                {isDeleteModalOpen && (
+                    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center">
+                        <div className="bg-[#1a1a1a] p-6 rounded-lg w-96">
+                            <h3 className="text-lg font-bold mb-4">Delete Confirmation</h3>
+                            <p className="mb-4">What do you want to delete?</p>
+                            <div className="flex justify-end gap-2">
+                                <button
+                                    onClick={() => handleDeleteAction('token')}
+                                    className="bg-red-600 hover:text-red-700 px-4 py-2 rounded"
+                                >
+                                    Delete Token
+                                </button>
+                                <button
+                                    onClick={() => handleDeleteAction('user')}
+                                    className="bg-red-600 hover:text-red-700 px-4 py-2 rounded"
+                                >
+                                    Delete User
+                                </button>
+                                <button
+                                    onClick={closeDeleteModal}
+                                    className="bg-gray-600 hover:text-gray-700 px-4 py-2 rounded"
+                                >
+                                    Cancel
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                )}
+
+                {/* Toast with updated styling */}
+                {toastMessage && (
+                    <div className="fixed bottom-4 right-4 bg-[#D32F2F] text-white px-4 py-2 rounded-lg shadow-lg">
+                        {toastMessage}
+                    </div>
+                )}
             </div>
-
-            {/* Renew Token Modal */}
-            {isRenewModalOpen && (
-                <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center">
-                    <div className="bg-gray-800 p-6 rounded-lg w-96">
-                        <h3 className="text-lg font-bold mb-4">Renew Token</h3>
-                        <label className="block mb-4">
-                            <span className="text-sm font-semibold">Select Duration:</span>
-                            <select
-                                value={selectedDuration}
-                                onChange={(e) => setSelectedDuration(e.target.value)}
-                                className="w-full p-2 bg-gray-700 rounded mt-1"
-                            >
-                                <option value="3month">3 Months</option>
-                                <option value="6month">6 Months</option>
-                                <option value="1year">1 Year</option>
-                            </select>
-                        </label>
-                        <div className="flex justify-end gap-2">
-                            <button
-                                onClick={closeRenewModal}
-                                className="bg-gray-600 hover:bg-gray-700 px-4 py-2 rounded"
-                            >
-                                Cancel
-                            </button>
-                            <button
-                                onClick={handleRenewToken}
-                                className="bg-blue-600 hover:bg-blue-700 px-4 py-2 rounded"
-                            >
-                                Renew
-                            </button>
-                        </div>
-                    </div>
-                </div>
-            )}
-
-            {/* Delete Confirmation Modal */}
-            {isDeleteModalOpen && (
-                <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center">
-                    <div className="bg-gray-800 p-6 rounded-lg w-96">
-                        <h3 className="text-lg font-bold mb-4">Delete Confirmation</h3>
-                        <p className="mb-4">What do you want to delete?</p>
-                        <div className="flex justify-end gap-2">
-                            <button
-                                onClick={() => handleDeleteAction('token')}
-                                className="bg-red-600 hover:text-red-700 px-4 py-2 rounded"
-                            >
-                                Delete Token
-                            </button>
-                            <button
-                                onClick={() => handleDeleteAction('user')}
-                                className="bg-red-600 hover:text-red-700 px-4 py-2 rounded"
-                            >
-                                Delete User
-                            </button>
-                            <button
-                                onClick={closeDeleteModal}
-                                className="bg-gray-600 hover:text-gray-700 px-4 py-2 rounded"
-                            >
-                                Cancel
-                            </button>
-                        </div>
-                    </div>
-                </div>
-            )}
         </div>
     );
 }
