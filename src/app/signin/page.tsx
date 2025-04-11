@@ -3,6 +3,9 @@
 import React, { useState, useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@supabase/supabase-js";
+import Link from "next/link";
+import { ToastContainer, toast } from 'react-toastify';
+import 'react-toastify/dist/ReactToastify.css';
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
 const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
@@ -18,14 +21,20 @@ const STORAGE_KEYS = {
 export default function SignInPage() {
     const [username, setUsername] = useState("");
     const [password, setPassword] = useState("");
-    const [toastMessage, setToastMessage] = useState<string | null>(null);
     const [isLoading, setIsLoading] = useState(false);
     const router = useRouter();
     const sessionChannel = useRef<any>(null);
 
-    const showToast = (message: string, duration: number = 3000) => {
-        setToastMessage(message);
-        setTimeout(() => setToastMessage(null), duration);
+    const showToast = (message: string, type: 'success' | 'error' = 'error') => {
+        toast[type](message, {
+            position: "top-right",
+            autoClose: 3000,
+            hideProgressBar: false,
+            closeOnClick: true,
+            pauseOnHover: true,
+            draggable: true,
+            theme: "dark"
+        });
     };
 
     const generateSessionToken = (): string => {
@@ -224,48 +233,56 @@ export default function SignInPage() {
 
             await updateUserSession(user.id.toString(), newSessionToken, newSessionId, user.login_count);
             storeSessionData(newSessionToken, user.id.toString(), user.username, newSessionId);
-            completeLoginFlow();
-        }  catch (error: unknown) {
-            console.error('Sign in error:', error);
-            showToast("An error occurred during sign in. Please try again.");
+            showToast("Successfully signed in!", 'success');
+            setTimeout(() => {
+                completeLoginFlow();
+            }, 1000);
+        } catch (error) {
+            showToast("An error occurred during sign in");
         } finally {
             setIsLoading(false);
         }
     };
 
     return (
-        <div className="min-h-screen bg-gradient-to-b from-gray-900 via-purple-900 to-violet-600 flex items-center justify-center p-4">
-            <div className="bg-gray-800/50 backdrop-blur-lg p-8 rounded-xl shadow-xl max-w-md w-full">
-                <h1 className="text-3xl font-bold text-white text-center mb-8">
-                    Galaxy KickLock SignIn
+        <div className="welcome-container">
+            <ToastContainer />
+            <div className="auth-card max-w-md w-full p-8">
+                <h1 className="text-center mb-8">
+                    <span style={{ 
+                        color: '#D32F2F',
+                        fontFamily: 'Audiowide, cursive',
+                        fontSize: '2rem',
+                        textShadow: '0 0 10px rgba(211, 47, 47, 0.3)'
+                    }}>
+                        KICK ~ LOCK
+                    </span>
                 </h1>
-                
-                {toastMessage && (
-                    <div className="mb-4 p-3 bg-blue-500/20 text-white rounded-lg text-center">
-                        {toastMessage}
-                    </div>
-                )}
 
                 <form onSubmit={handleSubmit} className="space-y-6">
-                    <div>
-                        <label className="block text-white mb-2">Username</label>
+                    <div className="form-group">
+                        <label className="block text-white text-sm font-semibold mb-2 text-left w-full">
+                            Username
+                        </label>
                         <input
                             type="text"
                             value={username}
                             onChange={(e) => setUsername(e.target.value)}
-                            className="w-full px-4 py-2 bg-gray-700 text-white rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                            className="input-field"
                             placeholder="Enter username"
                             disabled={isLoading}
                         />
                     </div>
 
-                    <div>
-                        <label className="block text-white mb-2">Password</label>
+                    <div className="form-group">
+                        <label className="block text-white text-sm font-semibold mb-2 text-left w-full">
+                            Password
+                        </label>
                         <input
                             type="password"
                             value={password}
                             onChange={(e) => setPassword(e.target.value)}
-                            className="w-full px-4 py-2 bg-gray-700 text-white rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                            className="input-field"
                             placeholder="Enter password"
                             disabled={isLoading}
                         />
@@ -273,12 +290,18 @@ export default function SignInPage() {
 
                     <button
                         type="submit"
-                        className="w-full py-3 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition duration-200 disabled:opacity-50"
+                        className="welcome-button w-full mt-6"
                         disabled={isLoading}
                     >
                         {isLoading ? "Signing in..." : "Sign In"}
                     </button>
                 </form>
+
+                <div className="mt-6 text-center">
+                    <Link href="/signup" className="text-primary-color hover:text-secondary-color transition-colors">
+                        Don't have an account? Sign up
+                    </Link>
+                </div>
             </div>
         </div>
     );

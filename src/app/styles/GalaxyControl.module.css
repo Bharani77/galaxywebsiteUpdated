@@ -8,57 +8,16 @@
     align-items: center;
     padding: 2rem 1rem;
     z-index: 1;
-    background-color: #000000; /* Base black background */
-    /* Removing diagonal line background */
-    isolation: isolate;
-    box-sizing: border-box;
-    margin: 0;
-    border: none;
+    background-color: #000000;
     isolation: isolate;
     box-sizing: border-box;
     margin: 0;
     border: none;
   }
 
-  /* Fire GIF Background Effect */
-  .container::before,
-  .container::after {
-    content: '';
-    position: fixed; /* Use fixed positioning to stick to viewport edges */
-    bottom: -20px; /* Slightly overlap bottom edge */
-    width: 240px; /* Made larger */
-    height: 360px; /* Made larger (maintaining aspect ratio) */
-    background-image: url('https://media1.tenor.com/m/liJ84fQBFgsAAAAd/shane-ford.gif');
-    background-size: contain; /* Scale the GIF to fit */
-    background-repeat: no-repeat;
-    background-position: bottom center;
-    z-index: 0; /* Behind content */
-    opacity: 1; /* Use full opacity, mask will handle fading */
-    pointer-events: none; /* Prevent interaction */
-    /* mix-blend-mode removed, using mask instead */
-    mask-image: linear-gradient(to top, black 60%, transparent 100%),
-                linear-gradient(to left, black 80%, transparent 100%),
-                linear-gradient(to right, black 80%, transparent 100%);
-    mask-composite: intersect; /* Combine masks */
-    -webkit-mask-image: linear-gradient(to top, black 60%, transparent 100%),
-                        linear-gradient(to left, black 80%, transparent 100%),
-                        linear-gradient(to right, black 80%, transparent 100%);
-    -webkit-mask-composite: source-in; /* Combine masks for WebKit */
-  }
+  /* Remove fire GIF background effects */
+  /* Removed .container::before and .container::after */
 
-  .container::before {
-    left: -30px; /* Overlap left edge */
-    transform: scaleX(-1); /* Mirror the left GIF */
-  }
-
-  .container::after {
-    right: -30px; /* Overlap right edge */
-  }
-
-  /* Removed subtleLines keyframes */
-  
-  /* Removed .stars, .nebula, and associated animations */
-  
   .title {
     font-size: 3rem;
     font-weight: bold;

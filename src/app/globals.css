@@ -10,6 +10,11 @@
   --foreground: #f0f0f0; /* Off-white */
   --primary-color: #D32F2F; /* Material Design Red 700 */
   --secondary-color: #B71C1C; /* Material Design Red 900 */
+  --success-color: #22c55e;
+  --error-color: #dc2626;
+  --card-bg: #1a1a1a;
+  --input-bg: #2d2d2d;
+  --border-color: #333333;
 }
 
 @media (prefers-color-scheme: dark) {
@@ -96,4 +101,123 @@ button:hover {
   position: absolute;
   top: 20px;
   right: 20px;
+}
+
+/* Card Styles */
+.auth-card {
+  background: var(--card-bg);
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  padding: 2rem;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.5);
+  animation: cardGlow 3s ease-in-out infinite alternate;
+}
+
+/* Input Styles */
+.input-field {
+  background: var(--input-bg);
+  border: 1px solid var(--border-color);
+  color: var(--foreground);
+  padding: 0.75rem 1rem;
+  border-radius: 6px;
+  width: 100%;
+  transition: all 0.3s ease;
+}
+
+.input-field:focus {
+  outline: none;
+  border-color: var(--primary-color);
+  box-shadow: 0 0 0 2px rgba(211, 47, 47, 0.2);
+}
+
+/* Message Styles */
+.success-message {
+  background: rgba(34, 197, 94, 0.1);
+  border: 1px solid var(--success-color);
+  color: var(--success-color);
+  padding: 1rem;
+  border-radius: 6px;
+  margin: 1rem 0;
+  animation: messageSlide 0.3s ease-out;
+}
+
+.error-message {
+  background: rgba(220, 38, 38, 0.1);
+  border: 1px solid var(--error-color);
+  color: var(--error-color);
+  padding: 1rem;
+  border-radius: 6px;
+  margin: 1rem 0;
+  animation: messageSlide 0.3s ease-out;
+}
+
+/* Animations */
+@keyframes cardGlow {
+  from {
+    box-shadow: 0 4px 20px rgba(211, 47, 47, 0.1);
+  }
+  to {
+    box-shadow: 0 4px 20px rgba(211, 47, 47, 0.3);
+  }
+}
+
+@keyframes messageSlide {
+  from {
+    transform: translateY(-10px);
+    opacity: 0;
+  }
+  to {
+    transform: translateY(0);
+    opacity: 1;
+  }
+}
+
+/* Welcome Page Styles */
+.welcome-container {
+  min-height: 100vh;
+  background: var(--background);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 2rem;
+  text-align: center;
+}
+
+.welcome-title {
+  font-size: 4rem;
+  color: var(--foreground);
+  margin-bottom: 2rem;
+  text-shadow: 0 0 10px rgba(211, 47, 47, 0.5);
+  animation: titlePulse 3s ease-in-out infinite alternate;
+}
+
+.welcome-buttons {
+  display: flex;
+  gap: 1rem;
+  margin-top: 2rem;
+}
+
+.welcome-button {
+  background: var(--card-bg);
+  color: var(--foreground);
+  padding: 1rem 2rem;
+  border-radius: 8px;
+  border: 1px solid var(--border-color);
+  transition: all 0.3s ease;
+}
+
+.welcome-button:hover {
+  background: var(--primary-color);
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(211, 47, 47, 0.3);
+}
+
+@keyframes titlePulse {
+  from {
+    text-shadow: 0 0 10px rgba(211, 47, 47, 0.3);
+  }
+  to {
+    text-shadow: 0 0 20px rgba(211, 47, 47, 0.6);
+  }
 }

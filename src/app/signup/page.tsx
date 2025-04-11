@@ -3,6 +3,9 @@
 import React, { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@supabase/supabase-js";
+import Link from "next/link";
+import { ToastContainer, toast } from 'react-toastify';
+import 'react-toastify/dist/ReactToastify.css';
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
 const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
@@ -12,17 +15,19 @@ export default function SignUpPage() {
     const [username, setUsername] = useState("");
     const [password, setPassword] = useState("");
     const [token, setToken] = useState("");
-    const [toastMessage, setToastMessage] = useState<string | null>(null);
-    const [isClient, setIsClient] = useState(false);
+    const [isLoading, setIsLoading] = useState(false);
     const router = useRouter();
 
-    useEffect(() => {
-        setIsClient(true);
-    }, []);
-
-    const showToast = (message: string) => {
-        setToastMessage(message);
-        setTimeout(() => setToastMessage(null), 3000);
+    const showToast = (message: string, type: 'success' | 'error' = 'error') => {
+        toast[type](message, {
+            position: "top-right",
+            autoClose: 3000,
+            hideProgressBar: false,
+            closeOnClick: true,
+            pauseOnHover: true,
+            draggable: true,
+            theme: "dark"
+        });
     };
 
     const verifyToken = async (inputToken: string) => {
@@ -79,23 +84,22 @@ export default function SignUpPage() {
 
     const handleSubmit = async (event: React.FormEvent) => {
         event.preventDefault();
-
-        if (!username.trim() || !password.trim()) {
-            showToast("Username and password cannot be empty.");
-            return;
-        }
-
-        if (!token.trim()) {
-            showToast("Token cannot be empty.");
-            return;
-        }
-
+        if (isLoading) return;
+        
+        setIsLoading(true);
         try {
-            const isTokenValid = await verifyToken(token);
-
-            if (!isTokenValid) {
+            if (!username.trim() || !password.trim()) {
+                showToast("Username and password cannot be empty.");
                 return;
             }
+
+            if (!token.trim()) {
+                showToast("Token cannot be empty.");
+                return;
+            }
+
+            const isTokenValid = await verifyToken(token);
+            if (!isTokenValid) return;
 
             const { data: userData, error } = await supabase
                 .from("users")
@@ -110,81 +114,108 @@ export default function SignUpPage() {
 
             if (error) {
                 showToast("Error: " + (error.message || 'Failed to create user'));
-            } else {
-                const userId = userData.id;
+                return;
+            }
 
-                await associateTokenWithUser(token, userId);
+            const userId = userData.id;
+            await associateTokenWithUser(token, userId);
 
-                const { error: updateError } = await supabase
-                    .from('tokengenerate')
-                    .update({ status: 'InUse' })
-                    .eq('token', token);
-                
-                if (updateError) {
-                    showToast("Error updating token status.");
-                }
+            const { error: updateError } = await supabase
+                .from('tokengenerate')
+                .update({ status: 'InUse' })
+                .eq('token', token);
+            
+            if (updateError) {
+                showToast("Error updating token status.");
+                return;
+            }
 
-                showToast("Signup successful!");
+            showToast("Signup successful!", 'success');
+            setTimeout(() => {
                 setUsername("");
                 setPassword("");
                 setToken("");
-                router.push("/");
-            }
+                router.push("/signin");
+            }, 2000);
         } catch (error) {
             showToast("An unexpected error occurred.");
+        } finally {
+            setIsLoading(false);
         }
     };
 
     return (
-        <div className="min-h-screen bg-gradient-to-b from-gray-900 via-purple-900 to-violet-600 flex items-center justify-center p-4">
-            <div className="bg-gray-800/50 backdrop-blur-lg p-8 rounded-xl shadow-xl max-w-md w-full">
-                <h1 className="text-3xl font-bold text-white text-center mb-8">
-                    Galaxy KickLock SignUp
+        <div className="welcome-container">
+            <ToastContainer />
+            <div className="auth-card max-w-md w-full p-8">
+                <h1 className="text-center mb-8">
+                    <span style={{ 
+                        color: '#D32F2F',
+                        fontFamily: 'Audiowide, cursive',
+                        fontSize: '2rem',
+                        textShadow: '0 0 10px rgba(211, 47, 47, 0.3)'
+                    }}>
+                        KICK ~ LOCK
+                    </span>
                 </h1>
-                {isClient && toastMessage && (
-                    <div className="mb-4 p-3 bg-blue-500/20 text-white rounded-lg text-center">
-                        {toastMessage}
-                    </div>
-                )}
+
                 <form onSubmit={handleSubmit} className="space-y-6">
-                    <div>
-                        <label className="block text-white mb-2">Username</label>
+                    <div className="form-group">
+                        <label className="block text-white text-sm font-semibold mb-2 text-left w-full">
+                            Username
+                        </label>
                         <input
                             type="text"
                             value={username}
                             onChange={(e) => setUsername(e.target.value)}
-                            className="w-full px-4 py-2 bg-gray-700 text-white rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                            className="input-field"
                             placeholder="Enter username"
+                            disabled={isLoading}
                         />
                     </div>
-                    <div>
-                        <label className="block text-white mb-2">Password</label>
+
+                    <div className="form-group">
+                        <label className="block text-white text-sm font-semibold mb-2 text-left w-full">
+                            Password
+                        </label>
                         <input
                             type="password"
                             value={password}
                             onChange={(e) => setPassword(e.target.value)}
-                            className="w-full px-4 py-2 bg-gray-700 text-white rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                            className="input-field"
                             placeholder="Enter password"
+                            disabled={isLoading}
                         />
                     </div>
-                    <div>
-                        <label className="block text-white mb-2">Token</label>
+
+                    <div className="form-group">
+                        <label className="block text-white text-sm font-semibold mb-2 text-left w-full">
+                            Token
+                        </label>
                         <input
                             type="text"
                             value={token}
                             onChange={(e) => setToken(e.target.value)}
-                            className="w-full px-4 py-2 bg-gray-700 text-white rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                            className="input-field"
                             placeholder="Enter token"
+                            disabled={isLoading}
                         />
                     </div>
 
                     <button
                         type="submit"
-                        className="w-full py-3 bg-purple-600 hover:bg-purple-700 text-white rounded-lg transition duration-200"
+                        className="welcome-button w-full mt-6"
+                        disabled={isLoading}
                     >
-                        Sign Up
+                        {isLoading ? "Signing up..." : "Sign Up"}
                     </button>
                 </form>
+
+                <div className="mt-6 text-center">
+                    <Link href="/signin" className="text-primary-color hover:text-secondary-color transition-colors">
+                        Already have an account? Sign in
+                    </Link>
+                </div>
             </div>
         </div>
     );
