@@ -1,29 +1,53 @@
 import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
+import { rateLimit } from './utils/rateLimit';
 
-export function middleware(request: NextRequest) {
-  // Only allow browser requests
-  const userAgent = request.headers.get('user-agent') || '';
-  const isCurl = userAgent.toLowerCase().includes('curl');
-  const isPostman = userAgent.toLowerCase().includes('postman');
-  const isAxios = userAgent.toLowerCase().includes('axios');
-
-  if (isCurl || isPostman || isAxios) {
-    return NextResponse.json(
-      { success: false, message: 'Access denied' },
-      { status: 403 }
-    );
+export async function middleware(request: NextRequest) {
+  // Validate request size
+  const contentLength = parseInt(request.headers.get('content-length') || '0');
+  if (contentLength > parseInt(SECURITY_CONFIG.maxRequestSize)) {
+    return new NextResponse(JSON.stringify({
+      error: 'Request too large',
+    }), { status: 413 });
   }
 
-  // Add security headers
+  // Rate limiting
+  if (request.nextUrl.pathname.startsWith('/api')) {
+    const limiter = await rateLimit(request);
+    if (!limiter.success) {
+      return new NextResponse(JSON.stringify({ 
+        error: 'Too many requests', 
+        message: 'Please try again later'
+      }), {
+        status: 429,
+        headers: {
+          'Content-Type': 'application/json',
+          'Retry-After': '60'
+        }
+      });
+    }
+  }
+
   const response = NextResponse.next();
   
-  response.headers.set('X-Content-Type-Options', 'nosniff');
-  response.headers.set('X-Frame-Options', 'DENY');
-  response.headers.set('X-XSS-Protection', '1; mode=block');
-  response.headers.set('Referrer-Policy', 'strict-origin-when-cross-origin');
-  response.headers.set('Content-Security-Policy', 
-    "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval'; style-src 'self' 'unsafe-inline';");
+  // Enhanced security headers
+  const securityHeaders = {
+    'X-DNS-Prefetch-Control': 'off',
+    'X-Content-Type-Options': 'nosniff',
+    'X-Frame-Options': 'DENY',
+    'X-XSS-Protection': '1; mode=block',
+    'Referrer-Policy': 'strict-origin-when-cross-origin',
+    'Strict-Transport-Security': 'max-age=31536000; includeSubDomains; preload',
+    'Permissions-Policy': 'camera=(), microphone=(), geolocation=(), interest-cohort=()',
+    'Content-Security-Policy': "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval'; style-src 'self' 'unsafe-inline';",
+    'Access-Control-Allow-Origin': process.env.ALLOWED_ORIGINS || '*',
+    'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
+    'Access-Control-Max-Age': '7200',
+  };
+
+  Object.entries(securityHeaders).forEach(([key, value]) => {
+    response.headers.set(key, value);
+  });
 
   return response;
 }

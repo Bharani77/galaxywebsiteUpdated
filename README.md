@@ -1,5 +1,15 @@
 This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
 
+# Galaxy Website
+
+## Environment Setup
+
+1. Copy `.env.example` to `.env.local`
+2. Get your Supabase project URL and anon key from your Supabase dashboard
+3. Add these values to `.env.local`
+
+Never commit sensitive credentials to version control!
+
 ## Getting Started
 
 First, run the development server:
