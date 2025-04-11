@@ -6,7 +6,7 @@ const API_URL = process.env.STATUS_API_URL || 'https://buddymaster77hugs-gradio.
 export async function POST(request: Request) {
   try {
     if (!isBrowserRequest(request as any)) {
-      return NextResponse.json({ error: 'Access denied: Browser requests only' }, { status: 403 });
+      return NextResponse.json({ success: false }, { status: 403 });
     }
 
     const sessionToken = request.headers.get('authorization')?.split(' ')[1];
@@ -14,24 +14,22 @@ export async function POST(request: Request) {
     const { modal_name } = body;
 
     if (!await validateSession(sessionToken, modal_name)) {
-      return NextResponse.json({ error: 'Invalid or expired session' }, { status: 401 });
+      return NextResponse.json({ success: false }, { status: 401 });
     }
 
     const response = await fetch(API_URL, {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json'
-      },
+      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ modal_name })
     });
 
     const data = await response.json();
-    return NextResponse.json(data, { status: response.status });
+    return NextResponse.json(
+      { success: true, deployed: data.status === "deployed" },
+      { status: 200 }
+    );
 
   } catch (error) {
-    return NextResponse.json(
-      { error: 'Internal Server Error' },
-      { status: 500 }
-    );
+    return NextResponse.json({ success: false }, { status: 500 });
   }
 }
