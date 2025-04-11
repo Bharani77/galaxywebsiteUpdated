@@ -105,8 +105,23 @@ export default function AdminLoginPage() {
     if (loading) {
         return (
             <div className="welcome-container">
-                <div className="auth-card">
-                    <p>Loading...</p>
+                <div className="auth-card max-w-md w-full p-8">
+                    <h1 className="text-center mb-8">
+                        <span style={{ 
+                            color: '#D32F2F',
+                            fontFamily: 'Audiowide, cursive',
+                            fontSize: '2rem',
+                            textShadow: '0 0 10px rgba(211, 47, 47, 0.3)'
+                        }}>
+                            KICK ~ LOCK ADMIN
+                        </span>
+                    </h1>
+                    <div className="flex flex-col items-center justify-center min-h-[120px] bg-[#1a1a1a] rounded-lg p-6">
+                        <div className="text-white text-lg flex items-center gap-3">
+                            <div className="w-5 h-5 border-t-2 border-r-2 border-[#D32F2F] rounded-full animate-spin"></div>
+                            <span>Loading...</span>
+                        </div>
+                    </div>
                 </div>
             </div>
         );
