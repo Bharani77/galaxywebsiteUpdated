@@ -26,8 +26,7 @@ function ProfileContent() {
             userId = sessionStorage.getItem("userId");
             sessionId = sessionStorage.getItem("sessionId");
             storedUsername = sessionStorage.getItem("username");
-        } catch (error) {
-            console.error('Error accessing sessionStorage:', error);
+        } catch {
             router.push('/signin');
             return;
         }
@@ -41,78 +40,88 @@ function ProfileContent() {
         }
 
         if (!userId || !sessionId) {
-            // Check if there's an active session in DB
-            const { data: user, error } = await supabase
-                .from("users")
-                .select("id, username, active_session_id")
-                .eq("username", urlUsername)
-                .single();
-
-            if (error) {
-                console.error('Database error:', error);
-                toast.error('Error validating session');
-                return;
-            }
-
-            if (user?.active_session_id) {
-                // Active session exists in another tab
-                try {
-                    await supabase.rpc('terminate_session', { user_id: user.id });
-                } catch (rpcError) {
-                    console.error('Failed to terminate session:', rpcError);
-                    toast.error('Error ending previous session');
-                }
-                sessionStorage.clear();
-                router.push('/signin');
-                toast.error('Duplicate session detected. Multiple tabs are not allowed.');
-            } else {
-                // No active session anywhere
-                sessionStorage.clear();
-                router.push('/signin');
-                toast.error('No active session found. Please sign in.');
-            }
+            sessionStorage.clear();
+            router.push('/signin');
             return;
         }
 
         // Validate against database
         const { data: user, error } = await supabase
             .from("users")
-            .select("id, username, active_session_id")
+            .select("id, username, active_session_id, token")
             .eq("id", userId)
             .single();
 
+        // Handle user not found or database error
+        if (error?.code === 'PGRST116' || !user) {
+            // User doesn't exist anymore
+            await handleUserRemoval(storedUsername);
+            return;
+        }
+
         if (error) {
-            console.error('Database error:', error);
-            toast.error('Error validating session');
+            toast.error('Session validation failed');
+            router.push('/signin');
+            return;
+        }
+
+        // Check if token still exists and is valid
+        const { data: tokenData, error: tokenError } = await supabase
+            .from('tokengenerate')
+            .select('status')
+            .eq('token', user.token)
+            .single();
+
+        if (tokenError || !tokenData) {
+            // Token doesn't exist or is invalid
+            await handleUserRemoval(storedUsername);
             return;
         }
 
         if (!user || user.active_session_id !== sessionId || user.username !== urlUsername) {
-            // Session is invalid or username doesn't match
             sessionStorage.clear();
             router.push('/signin');
-            toast.error('Invalid session or URL. Please sign in again.');
+            toast.error('Session expired. Please sign in again.');
             return;
         }
     };
 
+    const handleUserRemoval = async (username: string | null) => {
+        if (username) {
+            try {
+                // Attempt to undeploy
+                await fetch('https://buddymaster77hugs-gradio.hf.space/api/undeploy', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        modal_name: username
+                    })
+                });
+            } catch {
+                // Silently handle undeploy error
+            }
+        }
+        sessionStorage.clear();
+        toast.error('User access has been revoked');
+        router.push('/signin');
+    };
+
     useEffect(() => {
         if (!urlUsername) {
-            toast.error('Invalid URL. Redirecting to signin...', {
-                onClose: () => router.push('/signin')
-            });
+            toast.error('Invalid URL. Redirecting to signin...');
+            router.push('/signin');
             return;
         }
 
         validateSession();
         
-        // Validate session every 10 seconds
-        const interval = setInterval(validateSession, 10000);
+        // Validate session every 5 seconds
+        const interval = setInterval(validateSession, 5000);
 
         return () => clearInterval(interval);
     }, [router, urlUsername]);
-
-    // handleLogout removed, handled by GalaxyForm component
 
     return (
         <div className="min-h-screen flex flex-col items-center justify-center p-4 relative"> {/* Removed background gradient, will use global body background */}

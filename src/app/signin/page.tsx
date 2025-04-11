@@ -81,7 +81,10 @@ export default function SignInPage() {
                 })
                 .eq("id", userId);
 
-            if (error) throw error;
+            if (error) {
+                showToast("Session could not be terminated properly");
+                return;
+            }
             
             await supabase
                 .channel('session_updates')
@@ -91,8 +94,7 @@ export default function SignInPage() {
                     payload: { userId: parseInt(userId) }
                 });
         } catch (error) {
-            console.error("Session termination error:", error);
-            showToast("Failed to properly end session. Please clear browser data.");
+            showToast("Failed to properly end session");
         } finally {
             clearSessionStorage();
             router.push("/");
@@ -138,8 +140,6 @@ export default function SignInPage() {
 
     const authenticateUser = async () => {
         try {
-            console.log('Attempting login with username:', username);
-
             const { data: user, error } = await supabase
                     .from("users")
                 .select("id, username, password, active_session_id, login_count")
@@ -147,25 +147,21 @@ export default function SignInPage() {
                 .single();
 
             if (error) {
-                console.error('Database error:', error);
                 showToast("Invalid credentials");
                 return null;
             }
 
             if (!user) {
-                console.log('No user found with username:', username);
                 showToast("Invalid credentials");
                 return null;
             }
 
             if (user.password !== password) {
-                console.log('Password mismatch');
                 showToast("Invalid credentials");
                 return null;
             }
             return user;
         } catch (error) {
-            console.error('Authentication error:', error);
             showToast("An error occurred during authentication");
             return null;
         }
