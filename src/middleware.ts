@@ -1,5 +1,4 @@
-import { NextResponse } from 'next/server';
-import type { NextRequest } from 'next/server';
+import { NextResponse, type NextRequest } from 'next/server';
 import { SecurityUtils } from '@/utils/securityUtils';
 
 export function middleware(request: NextRequest) {
@@ -27,7 +26,7 @@ export function middleware(request: NextRequest) {
     return response;
   } catch (error) {
     console.error('Middleware error:', error);
-    return new NextResponse('Internal Server Error', { status: 500 });
+    return NextResponse.error();
   }
 }
 
