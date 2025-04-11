@@ -1,28 +1,32 @@
 import { NextResponse } from 'next/server';
-import { isBrowserRequest } from '@/utils/securityChecks';
-import { ServerAPI } from '@/lib/server-api';
-import { sanitizeResponse } from '@/utils/sanitize-response';
+import { isBrowserRequest, validateSession } from '@/utils/securityChecks';
+
+const API_URL = process.env.UNDEPLOY_API_URL || 'https://buddymaster77hugs-gradio.hf.space/api/undeploy';
 
 export async function POST(request: Request) {
   try {
     if (!isBrowserRequest(request as any)) {
-      return NextResponse.json(sanitizeResponse({ success: false }), { status: 403 });
+      return NextResponse.json({ success: false }, { status: 403 });
     }
 
     const sessionToken = request.headers.get('authorization')?.split(' ')[1];
-    if (!sessionToken) {
-      return NextResponse.json(sanitizeResponse({ success: false }), { status: 401 });
+    const body = await request.json();
+    const { modal_name } = body;
+
+    if (!await validateSession(sessionToken, modal_name)) {
+      return NextResponse.json({ success: false }, { status: 401 });
     }
 
-    const body = await request.json();
-    const result = await ServerAPI.undeployModel(body.modal_name);
-    
-    return NextResponse.json(
-      sanitizeResponse({ success: result }), 
-      { status: result ? 200 : 500 }
-    );
+    const response = await fetch(API_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ modal_name })
+    });
+
+    await response.json();
+    return NextResponse.json({ success: true }, { status: 200 });
 
   } catch (error) {
-    return NextResponse.json(sanitizeResponse({ success: false }), { status: 500 });
+    return NextResponse.json({ success: false }, { status: 500 });
   }
 }
