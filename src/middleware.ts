@@ -1,33 +1,38 @@
 import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
+import { SecurityUtils } from '@/utils/securityUtils';
 
 export function middleware(request: NextRequest) {
-  // Only allow browser requests
-  const userAgent = request.headers.get('user-agent') || '';
-  const isCurl = userAgent.toLowerCase().includes('curl');
-  const isPostman = userAgent.toLowerCase().includes('postman');
-  const isAxios = userAgent.toLowerCase().includes('axios');
+  try {
+    // Rate limiting check
+    if (!SecurityUtils.checkRateLimit(request)) {
+      return new NextResponse('Too Many Requests', { status: 429 });
+    }
 
-  if (isCurl || isPostman || isAxios) {
-    return NextResponse.json(
-      { success: false, message: 'Access denied' },
-      { status: 403 }
-    );
+    // Bot and script detection
+    const userAgent = request.headers.get('user-agent') || '';
+    if (!SecurityUtils.validateUserAgent(userAgent)) {
+      return new NextResponse('Forbidden', { status: 403 });
+    }
+
+    // Create response with security headers
+    const response = NextResponse.next();
+    const securityHeaders = SecurityUtils.getSecurityHeaders();
+    
+    // Apply all security headers
+    Object.entries(securityHeaders).forEach(([key, value]) => {
+      response.headers.set(key, value);
+    });
+
+    return response;
+  } catch (error) {
+    console.error('Middleware error:', error);
+    return new NextResponse('Internal Server Error', { status: 500 });
   }
-
-  // Add security headers
-  const response = NextResponse.next();
-  
-  response.headers.set('X-Content-Type-Options', 'nosniff');
-  response.headers.set('X-Frame-Options', 'DENY');
-  response.headers.set('X-XSS-Protection', '1; mode=block');
-  response.headers.set('Referrer-Policy', 'strict-origin-when-cross-origin');
-  response.headers.set('Content-Security-Policy', 
-    "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval'; style-src 'self' 'unsafe-inline';");
-
-  return response;
 }
 
 export const config = {
-  matcher: '/api/:path*'
-}
+  matcher: [
+    '/((?!api|_next/static|_next/image|favicon.ico|robots.txt).*)',
+  ],
+};
