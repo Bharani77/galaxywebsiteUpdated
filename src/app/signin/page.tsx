@@ -141,31 +141,18 @@ export default function SignInPage() {
     const authenticateUser = async () => {
         try {
             const { data: user, error } = await supabase
-                .from("users")
-                .select("id, username, password, active_session_id, login_count, token")
+                    .from("users")
+                .select("id, username, password, active_session_id, login_count")
                 .eq("username", username)
                 .single();
 
-            if (error || !user) {
+            if (error) {
                 showToast("Invalid credentials");
                 return null;
             }
 
-            // Check if user has a token
-            if (!user.token) {
-                showToast("User access has been revoked. Please contact administrator.");
-                return null;
-            }
-
-            // Verify token is valid in tokengenerate table
-            const { data: tokenData, error: tokenError } = await supabase
-                .from('tokengenerate')
-                .select('status')
-                .eq('token', user.token)
-                .single();
-
-            if (tokenError || !tokenData || ['Invalid', 'N/A'].includes(tokenData.status)) {
-                showToast("User access has been revoked. Please contact administrator.");
+            if (!user) {
+                showToast("Invalid credentials");
                 return null;
             }
 
@@ -173,7 +160,6 @@ export default function SignInPage() {
                 showToast("Invalid credentials");
                 return null;
             }
-
             return user;
         } catch (error) {
             showToast("An error occurred during authentication");
