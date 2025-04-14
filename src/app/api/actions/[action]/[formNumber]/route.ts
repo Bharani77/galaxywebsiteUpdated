@@ -3,6 +3,7 @@ import { createClient } from '@supabase/supabase-js';
 import { rateLimit } from '@/utils/rateLimit';
 import { isBrowserRequest } from '@/utils/securityChecks';
 import { z } from 'zod'; // Add zod for validation
+import { type NextParams } from 'next/dist/server/web/spec-extension/adapters/next-request';
 
 const TIMEOUT_MS = 5000;
 const MAX_PAYLOAD_SIZE = 1024 * 100; // 100KB
@@ -22,9 +23,16 @@ const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
 const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
 const supabase = createClient(supabaseUrl, supabaseAnonKey);
 
+type RouteParams = {
+  params: {
+    action: string;
+    formNumber: string;
+  };
+};
+
 export async function POST(
-  request: Request,
-  context: { params: { action: string; formNumber: string } }
+  request: NextRequest,
+  { params }: RouteParams
 ) {
   try {
     // Request size validation
@@ -59,7 +67,7 @@ export async function POST(
     }
 
     // Validate params
-    const validatedParams = ParamsSchema.safeParse(context.params);
+    const validatedParams = ParamsSchema.safeParse(params);
     if (!validatedParams.success) {
       return NextResponse.json(
         { error: 'Invalid parameters' },
@@ -72,7 +80,7 @@ export async function POST(
       setTimeout(() => reject(new Error('Request timeout')), TIMEOUT_MS)
     );
 
-    const responsePromise = handleRequest(request, context.params);
+    const responsePromise = handleRequest(request, params);
     const response = await Promise.race([responsePromise, timeoutPromise]);
 
     return response;
