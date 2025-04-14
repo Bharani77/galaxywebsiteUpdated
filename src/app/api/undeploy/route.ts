@@ -13,7 +13,7 @@ export async function POST(request: Request) {
     const body = await request.json();
     const { modal_name } = body;
 
-    if (!await validateSession(sessionToken, modal_name)) {
+    if (!await validateSession(sessionToken ?? null, modal_name)) {
       return NextResponse.json({ error: 'Invalid or expired session' }, { status: 401 });
     }
 
