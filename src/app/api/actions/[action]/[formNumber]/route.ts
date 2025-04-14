@@ -24,7 +24,7 @@ const supabase = createClient(supabaseUrl, supabaseAnonKey);
 
 export async function POST(
   request: Request,
-  { params }: { params: { action: string; formNumber: string } }
+  context: { params: { action: string; formNumber: string } }
 ) {
   try {
     // Request size validation
@@ -59,7 +59,7 @@ export async function POST(
     }
 
     // Validate params
-    const validatedParams = ParamsSchema.safeParse(params);
+    const validatedParams = ParamsSchema.safeParse(context.params);
     if (!validatedParams.success) {
       return NextResponse.json(
         { error: 'Invalid parameters' },
@@ -72,7 +72,7 @@ export async function POST(
       setTimeout(() => reject(new Error('Request timeout')), TIMEOUT_MS)
     );
 
-    const responsePromise = handleRequest(request, params);
+    const responsePromise = handleRequest(request, context.params);
     const response = await Promise.race([responsePromise, timeoutPromise]);
 
     return response;
