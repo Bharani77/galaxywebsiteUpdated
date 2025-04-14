@@ -1,12 +1,12 @@
 import { z } from 'zod';
 
-export const validateContentLength = (length: number, maxSize: number) => {
+export function validateContentLength(length: number, maxSize: number): boolean {
   return length > 0 && length <= maxSize;
-};
+}
 
-export const sanitizeInput = (input: string): string => {
-  return input.replace(/[^a-zA-Z0-9-_]/g, '');
-};
+export function sanitizeInput(input: string): string {
+  return input.trim().replace(/[^a-zA-Z0-9_-]/g, '');
+}
 
 export const isValidUrl = (url: string): boolean => {
   try {

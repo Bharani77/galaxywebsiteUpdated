@@ -1,5 +1,6 @@
 import { NextResponse, NextRequest } from 'next/server';
-import { isBrowserRequest, validateSession } from '@/utils/securityChecks';
+import { isBrowserRequest } from '@/utils/browserCheck';
+import { validateSession } from '@/utils/sessionValidator';
 import { createClient } from '@supabase/supabase-js';
 import { rateLimit } from '@/utils/rateLimit';
 import { z } from 'zod';

@@ -1,5 +1,5 @@
 import { NextResponse, NextRequest } from 'next/server';
-import { isBrowserRequest, validateSession } from '@/utils/securityChecks';
+import { isBrowserRequest } from '@/utils/browserCheck';
 import { validateContentLength, sanitizeInput } from '@/utils/apiValidation';
 import { rateLimit } from '@/utils/rateLimit';
 import { z } from 'zod';

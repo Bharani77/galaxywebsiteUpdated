@@ -19,8 +19,8 @@ export async function middleware(request: NextRequest) {
 
     // Rate limiting for API routes
     if (request.nextUrl.pathname.startsWith('/api')) {
-      const limiter = await rateLimit(request);
-      if (!limiter.success) {
+      const rateLimitResult = await rateLimit(request);
+      if (!rateLimitResult.success) {
         return new NextResponse(
           JSON.stringify({ 
             error: 'Too many requests', 
@@ -30,10 +30,7 @@ export async function middleware(request: NextRequest) {
             status: 429,
             headers: {
               ...getSecurityHeaders(),
-              'Retry-After': '60',
-              'X-RateLimit-Limit': limiter.limit.toString(),
-              'X-RateLimit-Remaining': limiter.remaining.toString(),
-              'X-RateLimit-Reset': Math.ceil(limiter.reset / 1000).toString()
+              'Retry-After': '60'
             }
           }
         );
