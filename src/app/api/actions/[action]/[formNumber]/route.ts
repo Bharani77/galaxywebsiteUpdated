@@ -3,7 +3,6 @@ import { createClient } from '@supabase/supabase-js';
 import { rateLimit } from '@/utils/rateLimit';
 import { isBrowserRequest } from '@/utils/securityChecks';
 import { z } from 'zod'; // Add zod for validation
-import { type NextParams } from 'next/dist/server/web/spec-extension/adapters/next-request';
 
 const TIMEOUT_MS = 5000;
 const MAX_PAYLOAD_SIZE = 1024 * 100; // 100KB
