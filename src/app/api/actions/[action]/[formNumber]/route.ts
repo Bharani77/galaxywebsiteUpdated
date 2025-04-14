@@ -1,4 +1,4 @@
-import { NextResponse } from 'next/server';
+import { NextResponse, NextRequest } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 import { rateLimit } from '@/utils/rateLimit';
 import { isBrowserRequest } from '@/utils/securityChecks';
@@ -45,7 +45,7 @@ export async function POST(
     }
 
     // Rate limiting
-    const rateLimitResult = await rateLimit(request) as { success: boolean };
+    const rateLimitResult = await rateLimit(request as NextRequest) as { success: boolean };
     if (!rateLimitResult.success) {
       return NextResponse.json(
         { error: 'Too many requests' },

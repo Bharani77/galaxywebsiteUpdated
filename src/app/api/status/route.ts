@@ -1,12 +1,33 @@
-import { NextResponse } from 'next/server';
+import { NextResponse, NextRequest } from 'next/server';
 import { isBrowserRequest, validateSession } from '@/utils/securityChecks';
 import { validateContentLength, sanitizeInput } from '@/utils/apiValidation';
 import { rateLimit } from '@/utils/rateLimit';
 import { z } from 'zod';
+import { API_CONFIG } from '@/config/api';
+import { createClient } from '@supabase/supabase-js';
 
 const API_URL = process.env.STATUS_API_URL || 'https://buddymaster77hugs-gradio.hf.space/api/status';
 const MAX_REQUEST_SIZE = 1024; // 1KB
 const FETCH_TIMEOUT = 10000; // 10 seconds
+
+const supabase = createClient(
+  process.env.NEXT_PUBLIC_SUPABASE_URL || '',
+  process.env.SUPABASE_SERVICE_ROLE_KEY || ''
+);
+
+async function validateSessionInternally(token: string) {
+  try {
+    const { data, error } = await supabase
+      .from('users')
+      .select('id, active_session_id')
+      .single();
+
+    if (error || !data) return false;
+    return data.active_session_id === token;
+  } catch {
+    return false;
+  }
+}
 
 // Input validation schema
 const RequestSchema = z.object({
@@ -34,11 +55,25 @@ export async function POST(request: Request) {
     }
 
     // Rate limiting
-    const rateLimitResult = await rateLimit(request) as { success: boolean };
+    const rateLimitResult = await rateLimit(request as NextRequest) as { success: boolean };
     if (!rateLimitResult.success) {
       return NextResponse.json(
         { error: 'Too many requests' },
-        { status: 429 }
+        { 
+          status: 429,
+          headers: new Headers({
+            'X-Content-Type-Options': 'nosniff',
+            'Cache-Control': 'no-store, no-cache, must-revalidate',
+            'Pragma': 'no-cache',
+            'X-Frame-Options': 'DENY',
+            'X-Request-ID': crypto.randomUUID(),
+            'Access-Control-Allow-Origin': process.env.NEXT_PUBLIC_APP_URL || '',
+            'Access-Control-Allow-Methods': 'POST, OPTIONS',
+            'Content-Security-Policy': "default-src 'self'",
+            'Referrer-Policy': 'strict-origin-when-cross-origin',
+            'Server': 'Unknown', // Hide server information
+          })
+        }
       );
     }
 
@@ -77,7 +112,7 @@ export async function POST(request: Request) {
     }
 
     // Validate session
-    if (!await validateSession(sessionToken, modalName)) {
+    if (!await validateSessionInternally(sessionToken)) {
       return NextResponse.json(
         { error: 'Invalid session' },
         { status: 401 }
@@ -89,33 +124,50 @@ export async function POST(request: Request) {
     const timeoutId = setTimeout(() => controller.abort(), FETCH_TIMEOUT);
 
     try {
-      const response = await fetch(API_URL, {
+      // Make internal API request server-side only
+      const internalResponse = await fetch(API_URL, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
           'X-Request-ID': crypto.randomUUID(),
+          ...API_CONFIG.headers.internal
         },
-        body: JSON.stringify({ modal_name: modalName }),
-        signal: controller.signal
+        body: JSON.stringify({ 
+          modal_name: modalName,
+          _internal: true // Mark as internal request
+        }),
+        signal: controller.signal,
+        // Prevent caching
+        cache: 'no-store',
+        next: { revalidate: 0 }
       });
 
-      if (!response.ok) {
-        throw new Error(`API responded with status: ${response.status}`);
+      if (!internalResponse.ok) {
+        throw new Error(`API responded with status: ${internalResponse.status}`);
       }
 
-      const data = await response.json();
+      const data = await internalResponse.json();
 
+     
       return NextResponse.json(
         { success: true, deployed: data.status === "deployed" },
         {
           status: 200,
-          headers: {
+          headers: new Headers({
             'Content-Type': 'application/json',
             'X-Content-Type-Options': 'nosniff',
-            'Cache-Control': 'no-store'
-          }
+            'Cache-Control': 'no-store, no-cache, must-revalidate',
+            'Pragma': 'no-cache',
+            'X-Frame-Options': 'DENY',
+            'X-Request-ID': crypto.randomUUID(),
+            'Access-Control-Allow-Origin': process.env.NEXT_PUBLIC_APP_URL || '',
+            'Access-Control-Allow-Methods': 'POST, OPTIONS',
+            'Content-Security-Policy': "default-src 'self'",
+            'Referrer-Policy': 'strict-origin-when-cross-origin',
+            'Server': 'Unknown'
+          })
         }
-      );
+      ); // Added missing closing parenthesis
 
     } finally {
       clearTimeout(timeoutId);

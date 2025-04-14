@@ -1,4 +1,4 @@
-import { NextResponse } from 'next/server';
+import { NextResponse, NextRequest } from 'next/server';
 import { isBrowserRequest, validateSession } from '@/utils/securityChecks';
 import { validateContentLength, sanitizeInput } from '@/utils/apiValidation';
 import { rateLimit } from '@/utils/rateLimit';
@@ -7,7 +7,7 @@ const API_URL = process.env.UNDEPLOY_API_URL || 'https://buddymaster77hugs-gradi
 const MAX_REQUEST_SIZE = 1024; // 1KB
 const FETCH_TIMEOUT = 10000; // 10 seconds
 
-export async function POST(request: Request) {
+export async function POST(request: NextRequest) {
   try {
     // Validate request size
     const contentLength = parseInt(request.headers.get('content-length') || '0');

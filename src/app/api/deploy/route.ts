@@ -1,4 +1,4 @@
-import { NextResponse } from 'next/server';
+import { NextResponse, NextRequest } from 'next/server';
 import { isBrowserRequest, validateSession } from '@/utils/securityChecks';
 import { createClient } from '@supabase/supabase-js';
 import { rateLimit } from '@/utils/rateLimit';
@@ -6,7 +6,7 @@ import { z } from 'zod';
 
 const TIMEOUT_MS = 30000; // 30 second timeout
 const MAX_PAYLOAD_SIZE = 1024 * 50; // 50KB limit
-const ALLOWED_ORIGINS = ['https://yourdomain.com']; // Add your allowed origins
+const ALLOWED_ORIGINS = ['https://galaxykicklock.web.app/']; // Add your allowed origins
 
 // Input validation schema
 const RequestSchema = z.object({
@@ -51,7 +51,7 @@ export async function POST(request: Request) {
     }
 
     // Check rate limits
-    const rateLimitResult = await rateLimit(request) as { success: boolean };
+    const rateLimitResult = await rateLimit(request as NextRequest) as { success: boolean };
     if (!rateLimitResult.success) {
       await logSecurityEvent('rate_limit_exceeded', { ip: request.headers.get('x-forwarded-for') });
       return NextResponse.json(
