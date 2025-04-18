@@ -470,6 +470,15 @@ const GalaxyForm: React.FC = () => {
               placeholder={`${key}`}
               className={className}
               maxLength={maxLength}
+              style={{
+                width: '100%',
+                backgroundColor: 'rgba(25, 0, 0, 0.7)',
+                border: '1px solid rgba(255, 0, 0, 0.3)',
+                color: '#fff',
+                padding: '0.75rem 1rem',
+                borderRadius: '4px',
+                maxWidth: '250px'
+              }}
             />
           ))}
           
