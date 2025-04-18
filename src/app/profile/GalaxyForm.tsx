@@ -470,10 +470,13 @@ const GalaxyForm: React.FC = () => {
               placeholder={`${key}`}
               className={className}
               maxLength={maxLength}
+              autoComplete="off"
               style={{
                 backgroundColor: 'rgba(25, 0, 0, 0.7)',
                 border: '1px solid rgba(255, 0, 0, 0.3)',
                 color: '#fff',
+                WebkitTextFillColor: '#fff',
+                boxShadow: 'none'
               }}
             />
           ))}
