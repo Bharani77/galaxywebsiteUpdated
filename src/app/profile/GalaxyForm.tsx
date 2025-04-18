@@ -476,11 +476,7 @@ const GalaxyForm: React.FC = () => {
                 backgroundColor: 'rgba(25, 0, 0, 0.7)',
                 border: '1px solid rgba(255, 0, 0, 0.3)',
                 color: '#fff',
-                WebkitTextFillColor: '#fff',
-                WebkitBoxShadow: '0 0 0 30px rgba(25, 0, 0, 0.7) inset',
-                boxShadow: '0 0 0 30px rgba(25, 0, 0, 0.7) inset',
-                appearance: 'none',
-                WebkitAppearance: 'none'
+                WebkitTextFillColor: '#fff'
               }}
             />
           ))}
@@ -594,20 +590,20 @@ const GalaxyForm: React.FC = () => {
     <div className={styles.container}>
       <div className={styles.header} style={{
         display: 'flex',
-        alignItems: 'flex-start', // Changed from center to flex-start
+        alignItems: 'flex-start',
         justifyContent: 'space-between',
         padding: '0px',
         backgroundColor: '#1a1a1a',
         borderRadius: '0px',
         margin: '0 0 20px 0',
-        position: 'relative' // Added position relative
+        position: 'relative'
       }}>
         {username && (
           <div style={{
             color: '#fff',
             fontWeight: 'bold', 
             fontSize: '1.1rem',
-            position: 'absolute', // Added absolute positioning
+            position: 'absolute',
             left: '-625px',
             top: '-15px',
             display: 'flex',
@@ -618,7 +614,7 @@ const GalaxyForm: React.FC = () => {
           </div>
         )}
 
-        <div style={{ marginLeft: 'auto' }}> {/* Added container for logout button */}
+        <div style={{ marginLeft: 'auto' }}>
           <button
             onClick={handleLogout}
             className={`${styles.button} ${styles.logoutButton}`}
@@ -652,8 +648,6 @@ const GalaxyForm: React.FC = () => {
         {renderForm(4)}
         {renderForm(5)}
       </div>
-
-      {/* Remove the deploy button section that was here */}
 
       {/* Deploy Popup */}
       {showDeployPopup && (
