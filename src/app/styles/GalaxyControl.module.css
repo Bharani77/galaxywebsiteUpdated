@@ -253,6 +253,23 @@
     background-clip: content-box !important;
     transition: background-color 5000s ease-in-out 0s;
   }
+
+  .input:-webkit-autofill {
+    -webkit-box-shadow: 0 0 0 30px rgba(25, 0, 0, 0.7) inset !important;
+    -webkit-text-fill-color: white !important;
+    box-shadow: 0 0 0 30px rgba(25, 0, 0, 0.7) inset !important;
+    background-color: rgba(25, 0, 0, 0.7) !important;
+    caret-color: white;
+  }
+
+  .input:-webkit-autofill:hover,
+  .input:-webkit-autofill:focus,
+  .input:-webkit-autofill:active {
+    -webkit-box-shadow: 0 0 0 30px rgba(25, 0, 0, 0.7) inset !important;
+    -webkit-text-fill-color: white !important;
+    box-shadow: 0 0 0 30px rgba(25, 0, 0, 0.7) inset !important;
+    background-color: rgba(25, 0, 0, 0.7) !important;
+  }
   
   .timeInput {
     width: 100%;

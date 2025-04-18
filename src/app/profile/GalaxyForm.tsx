@@ -470,15 +470,17 @@ const GalaxyForm: React.FC = () => {
               placeholder={`${key}`}
               className={className}
               maxLength={maxLength}
-              autoComplete="new-password"
-              data-form-type="other"
+              autoComplete="off"
+              onFocus={(e) => e.target.setAttribute('autocomplete', 'off')}
               style={{
                 backgroundColor: 'rgba(25, 0, 0, 0.7)',
                 border: '1px solid rgba(255, 0, 0, 0.3)',
                 color: '#fff',
                 WebkitTextFillColor: '#fff',
-                boxShadow: '0 0 0 1000px rgba(25, 0, 0, 0.7) inset',
-                WebkitBoxShadow: '0 0 0 1000px rgba(25, 0, 0, 0.7) inset'
+                WebkitBoxShadow: '0 0 0 30px rgba(25, 0, 0, 0.7) inset',
+                boxShadow: '0 0 0 30px rgba(25, 0, 0, 0.7) inset',
+                appearance: 'none',
+                WebkitAppearance: 'none'
               }}
             />
           ))}
