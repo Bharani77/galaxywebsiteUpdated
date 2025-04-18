@@ -386,6 +386,9 @@ const GalaxyForm: React.FC = () => {
           } : {}),
           ...(action === 'stop' ? { 
             start: { ...prev.start, active: false, text: 'Start' },
+          } : {}),
+          ...(action === 'update' ? {
+            update: { loading: false, active: true, text: 'Updated' }
           } : {})
         }));
         setError(''); // Clear any existing errors
@@ -502,6 +505,9 @@ const GalaxyForm: React.FC = () => {
               className={`${styles.button} ${buttonStates.update.loading ? styles.loadingButton : ''} 
                 ${buttonStates.update.active ? styles.buttonUpdated : ''}`}
               disabled={buttonStates.update.loading}
+              style={{ 
+                backgroundColor: buttonStates.update.active ? '#3b82f6' : undefined // Blue color when active
+              }}
             >
               <RefreshCw size={16} />
               <span>Update</span>
