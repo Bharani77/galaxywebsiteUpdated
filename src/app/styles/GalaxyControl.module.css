@@ -1,4 +1,12 @@
+/* Local variables - using regular classes instead of :root */
 .container {
+  --primary-color: #d32f2f;
+  --secondary-color: #b71c1c;
+  --background-dark: rgba(25, 0, 0, 0.7);
+  --foreground: #ffffff;
+  --input-border: rgba(255, 0, 0, 0.3);
+  --input-border-focus: rgba(255, 0, 0, 0.6);
+  
   position: relative;
   width: 100%;
   min-height: 100vh;
@@ -15,28 +23,18 @@
   border: none;
 }
 
-/* CSS Variables for consistent colors */
-:root {
-  --primary-color: #d32f2f;
-  --secondary-color: #b71c1c;
-  --background-dark: rgba(25, 0, 0, 0.7);
-  --foreground: #ffffff;
-  --input-border: rgba(255, 0, 0, 0.3);
-  --input-border-focus: rgba(255, 0, 0, 0.6);
-}
-
 .title {
   font-size: 3rem;
   font-weight: bold;
   color: white;
   text-align: center;
   margin-bottom: 2.5rem;
-  text-shadow: 0 0 10px var(--primary-color);
+  text-shadow: 0 0 10px #d32f2f;
   letter-spacing: 2px;
 }
 
 .kickLock {
-  color: var(--primary-color);
+  color: #d32f2f;
   font-family: 'Bungee', cursive;
   font-weight: 400;
   position: relative;
@@ -67,7 +65,7 @@
   position: fixed !important;
   top: 20px !important;
   right: 20px !important;
-  background: linear-gradient(135deg, var(--primary-color), var(--secondary-color));
+  background: linear-gradient(135deg, #d32f2f, #b71c1c);
   transition: all 0.3s ease;
   z-index: 1000;
   padding: 10px 20px;
@@ -88,7 +86,7 @@
 }
 
 .logoutButton:hover {
-  background: linear-gradient(135deg, var(--secondary-color), var(--primary-color));
+  background: linear-gradient(135deg, #b71c1c, #d32f2f);
   transform: translateY(-2px) scale(1.05);
   box-shadow: 0 4px 20px rgba(204, 0, 0, 0.7), 0 0 0 1px rgba(255, 0, 0, 0.5), 0 0 30px rgba(255, 0, 0, 0.3);
   text-shadow: 0 0 5px rgba(255, 255, 255, 0.5);
@@ -131,8 +129,8 @@
 }
 
 .activeTab {
-  background: var(--primary-color);
-  color: var(--foreground);
+  background: #d32f2f;
+  color: #ffffff;
   box-shadow: 0 0 10px rgba(255, 0, 0, 0.5);
 }
 
@@ -143,7 +141,7 @@
   left: 0;
   width: 100%;
   height: 2px;
-  background: linear-gradient(to right, var(--primary-color), var(--secondary-color));
+  background: linear-gradient(to right, #d32f2f, #b71c1c);
 }
 
 .formContent {
@@ -207,25 +205,25 @@
 /* CRITICAL FIX - Enhanced input styling to prevent autofill color issues */
 .input {
   padding: 0.75rem 1rem;
-  background-color: var(--background-dark) !important;
-  border: 1px solid var(--input-border);
+  background-color: rgba(25, 0, 0, 0.7) !important;
+  border: 1px solid rgba(255, 0, 0, 0.3);
   border-radius: 8px;
   color: white !important;
   font-size: 0.9rem;
   transition: all 0.3s;
   width: 100%;
   -webkit-text-fill-color: white !important;
-  -webkit-box-shadow: 0 0 0 1000px var(--background-dark) inset !important;
-  box-shadow: 0 0 0 1000px var(--background-dark) inset !important;
+  -webkit-box-shadow: 0 0 0 1000px rgba(25, 0, 0, 0.7) inset !important;
+  box-shadow: 0 0 0 1000px rgba(25, 0, 0, 0.7) inset !important;
   caret-color: white !important;
 }
 
 .input:focus {
   outline: none !important;
-  border-color: var(--input-border-focus) !important;
-  background-color: var(--background-dark) !important;
-  -webkit-box-shadow: 0 0 0 1000px var(--background-dark) inset !important;
-  box-shadow: 0 0 0 1000px var(--background-dark) inset !important;
+  border-color: rgba(255, 0, 0, 0.6) !important;
+  background-color: rgba(25, 0, 0, 0.7) !important;
+  -webkit-box-shadow: 0 0 0 1000px rgba(25, 0, 0, 0.7) inset !important;
+  box-shadow: 0 0 0 1000px rgba(25, 0, 0, 0.7) inset !important;
 }
 
 .input::placeholder {
@@ -233,34 +231,34 @@
   opacity: 1 !important;
 }
 
-/* Specifically target webkit browsers */
+/* Handle autofill specifically */
 .input:-webkit-autofill {
-  -webkit-box-shadow: 0 0 0 1000px var(--background-dark) inset !important;
+  -webkit-box-shadow: 0 0 0 1000px rgba(25, 0, 0, 0.7) inset !important;
   -webkit-text-fill-color: white !important;
-  box-shadow: 0 0 0 1000px var(--background-dark) inset !important;
-  background-color: var(--background-dark) !important;
+  box-shadow: 0 0 0 1000px rgba(25, 0, 0, 0.7) inset !important;
+  background-color: rgba(25, 0, 0, 0.7) !important;
   color: white !important;
 }
 
 .input:-webkit-autofill:hover,
 .input:-webkit-autofill:focus,
 .input:-webkit-autofill:active {
-  -webkit-box-shadow: 0 0 0 1000px var(--background-dark) inset !important;
+  -webkit-box-shadow: 0 0 0 1000px rgba(25, 0, 0, 0.7) inset !important;
   -webkit-text-fill-color: white !important;
-  box-shadow: 0 0 0 1000px var(--background-dark) inset !important;
-  background-color: var(--background-dark) !important;
+  box-shadow: 0 0 0 1000px rgba(25, 0, 0, 0.7) inset !important;
+  background-color: rgba(25, 0, 0, 0.7) !important;
   color: white !important;
   background-image: none !important;
   transition-property: background-color, box-shadow !important;
   transition-delay: 5000s !important;
 }
 
-/* Add this to force override browser's native styling */
+/* Force override browser's native styling */
 .input[type="text"],
 .input[type="text"]:focus {
-  background-color: var(--background-dark) !important;
-  -webkit-box-shadow: 0 0 0 1000px var(--background-dark) inset !important;
-  box-shadow: 0 0 0 1000px var(--background-dark) inset !important;
+  background-color: rgba(25, 0, 0, 0.7) !important;
+  -webkit-box-shadow: 0 0 0 1000px rgba(25, 0, 0, 0.7) inset !important;
+  box-shadow: 0 0 0 1000px rgba(25, 0, 0, 0.7) inset !important;
 }
 
 .timeInput {
@@ -275,8 +273,8 @@
   justify-content: center;
   gap: 0.5rem;
   padding: 0.75rem 1rem;
-  background: var(--primary-color);
-  color: var(--foreground);
+  background: #d32f2f;
+  color: #ffffff;
   border: none;
   border-radius: 8px;
   cursor: pointer;
@@ -290,7 +288,7 @@
 }
 
 .button:hover {
-  background: var(--secondary-color);
+  background: #b71c1c;
 }
 
 .button::before {
@@ -360,30 +358,14 @@
   }
 }
 
-/* Special styling for Firefox if needed */
-@-moz-document url-prefix() {
-  .input {
-    background-color: var(--background-dark) !important;
-    color: white !important;
-  }
-}
-
-/* Add these rules to specifically handle the autofill state switching */
-input:-internal-autofill-selected {
-  background-color: var(--background-dark) !important;
+/* Override styles for Firefox if needed */
+.firefoxOverride.input {
+  background-color: rgba(25, 0, 0, 0.7) !important;
   color: white !important;
-  -webkit-box-shadow: 0 0 0 1000px var(--background-dark) inset !important;
-  box-shadow: 0 0 0 1000px var(--background-dark) inset !important;
-  -webkit-text-fill-color: white !important;
 }
 
-/* Additional override for Chrome and Safari */
-@media screen and (-webkit-min-device-pixel-ratio:0) {
-  .input {
-    background-color: var(--background-dark) !important;
-  }
-  
-  .input:focus {
-    background-color: var(--background-dark) !important;
-  }
+/* Additional specificity for browser overrides */
+.webkitOverride.input,
+.webkitOverride.input:focus {
+  background-color: rgba(25, 0, 0, 0.7) !important;
 }
