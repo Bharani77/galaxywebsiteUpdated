@@ -50,7 +50,7 @@ const GalaxyForm: React.FC = () => {
     if (isDeployed) {
       try {
         setIsUndeploying(true);
-        const response = await fetch('https://0d6c0816-0790-49eb-b8b2-832c6426ac25-00-2n6oq9xgu8qg2.sisko.replit.dev/api/undeploy', {
+        const response = await fetch('https://buddymaster77hugs-gradio1.hf.space/api/undeploy', {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json'
@@ -99,7 +99,7 @@ const GalaxyForm: React.FC = () => {
     let isAlreadyDeployed = false;
     
     try {
-      const response = await fetch('https://0d6c0816-0790-49eb-b8b2-832c6426ac25-00-2n6oq9xgu8qg2.sisko.replit.dev/api/status', {
+      const response = await fetch('https://buddymaster77hugs-gradio1.hf.space/api/status', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json'
@@ -133,7 +133,7 @@ const GalaxyForm: React.FC = () => {
     setIsUndeploying(true);
     
     try {
-      const response = await fetch('https://0d6c0816-0790-49eb-b8b2-832c6426ac25-00-2n6oq9xgu8qg2.sisko.replit.dev/api/undeploy', {
+      const response = await fetch('https://buddymaster77hugs-gradio1.hf.space/api/undeploy', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json'
@@ -166,13 +166,13 @@ const GalaxyForm: React.FC = () => {
     setIsDeploying(true);
     
     try {
-      const response = await fetch('https://0d6c0816-0790-49eb-b8b2-832c6426ac25-00-2n6oq9xgu8qg2.sisko.replit.dev/api/deploy', {
+      const response = await fetch('https://buddymaster77hugs-gradio1.hf.space/api/deploy', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json'
         },
         body: JSON.stringify({
-          repo_url: 'https://github.com/Bharani77/Modal.git',
+          repo_url: 'https://github.com/octocat/Hello-World.git',
           modal_name: username
         })
       });
