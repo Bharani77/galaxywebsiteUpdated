@@ -11,8 +11,8 @@ type FormData = {
   startDefenceTime: string;
   stopDefenceTime: string;
   defenceIntervalTime: string;
-  planetName: string;
-  rival: string;
+  PlanetName: string;
+  Rival: string;
 };
 
 type ButtonState = {
@@ -205,8 +205,8 @@ const GalaxyForm: React.FC = () => {
     startDefenceTime: '',
     stopDefenceTime: '',
     defenceIntervalTime: '',
-    planetName: '',
-    rival: ''
+    PlanetName: '',
+    Rival: ''
   });
   
   const [formData2, setFormData2] = useState<FormData>({
@@ -217,8 +217,8 @@ const GalaxyForm: React.FC = () => {
     startDefenceTime: '',
     stopDefenceTime: '',
     defenceIntervalTime: '',
-    planetName: '',
-    rival: ''
+    PlanetName: '',
+    Rival: ''
   });
   
   const [formData3, setFormData3] = useState<FormData>({
@@ -229,8 +229,8 @@ const GalaxyForm: React.FC = () => {
     startDefenceTime: '',
     stopDefenceTime: '',
     defenceIntervalTime: '',
-    planetName: '',
-    rival: ''
+    PlanetName: '',
+    Rival: ''
   });
   
   const [formData4, setFormData4] = useState<FormData>({
@@ -241,8 +241,8 @@ const GalaxyForm: React.FC = () => {
     startDefenceTime: '',
     stopDefenceTime: '',
     defenceIntervalTime: '',
-    planetName: '',
-    rival: ''
+    PlanetName: '',
+    Rival: ''
   });
   
   const [formData5, setFormData5] = useState<FormData>({
@@ -253,8 +253,8 @@ const GalaxyForm: React.FC = () => {
     startDefenceTime: '',
     stopDefenceTime: '',
     defenceIntervalTime: '',
-    planetName: '',
-    rival: ''
+    PlanetName: '',
+    Rival: ''
   });
   
   const [buttonStates1, setButtonStates1] = useState<ButtonStates>({
@@ -473,8 +473,8 @@ const GalaxyForm: React.FC = () => {
       { key: 'startDefenceTime', type: 'text', maxLength: 5, className: `${styles.input} ${styles.timeInput}` },
       { key: 'stopDefenceTime', type: 'text', maxLength: 5, className: `${styles.input} ${styles.timeInput}` },
       { key: 'defenceIntervalTime', type: 'text', maxLength: 5, className: `${styles.input} ${styles.timeInput}` },
-      { key: 'planetName', type: 'text', maxLength: undefined, className: styles.input },
-      { key: 'rival', type: 'text', maxLength: undefined, className: styles.input }
+      { key: 'PlanetName', type: 'text', maxLength: undefined, className: styles.input },
+      { key: 'Rival', type: 'text', maxLength: undefined, className: styles.input }
     ];
   
     return (
