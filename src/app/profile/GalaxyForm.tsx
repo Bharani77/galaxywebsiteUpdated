@@ -5,11 +5,14 @@ import { useRouter } from 'next/navigation';
 
 type FormData = {
   RC: string;
-  Rival: string;
-  AttackTime: string;
-  IntervalTime: string;
-  DefenceTime: string;
-  PlanetName: string;
+  startAttackTime: string;
+  stopAttackTime: string;
+  attackIntervalTime: string;
+  startDefenceTime: string;
+  stopDefenceTime: string;
+  defenceIntervalTime: string;
+  planetName: string;
+  rival: string;
 };
 
 type ButtonState = {
@@ -196,47 +199,62 @@ const GalaxyForm: React.FC = () => {
   
   const [formData1, setFormData1] = useState<FormData>({
     RC: '',
-    Rival: '',
-    AttackTime: '',
-    IntervalTime: '',
-    DefenceTime: '',
-    PlanetName: ''
+    startAttackTime: '',
+    stopAttackTime: '',
+    attackIntervalTime: '',
+    startDefenceTime: '',
+    stopDefenceTime: '',
+    defenceIntervalTime: '',
+    planetName: '',
+    rival: ''
   });
   
   const [formData2, setFormData2] = useState<FormData>({
     RC: '',
-    Rival: '',
-    AttackTime: '',
-    IntervalTime: '',
-    DefenceTime: '',
-    PlanetName: ''
+    startAttackTime: '',
+    stopAttackTime: '',
+    attackIntervalTime: '',
+    startDefenceTime: '',
+    stopDefenceTime: '',
+    defenceIntervalTime: '',
+    planetName: '',
+    rival: ''
   });
   
   const [formData3, setFormData3] = useState<FormData>({
     RC: '',
-    Rival: '',
-    AttackTime: '',
-    IntervalTime: '',
-    DefenceTime: '',
-    PlanetName: ''
+    startAttackTime: '',
+    stopAttackTime: '',
+    attackIntervalTime: '',
+    startDefenceTime: '',
+    stopDefenceTime: '',
+    defenceIntervalTime: '',
+    planetName: '',
+    rival: ''
   });
   
   const [formData4, setFormData4] = useState<FormData>({
     RC: '',
-    Rival: '',
-    AttackTime: '',
-    IntervalTime: '',
-    DefenceTime: '',
-    PlanetName: ''
+    startAttackTime: '',
+    stopAttackTime: '',
+    attackIntervalTime: '',
+    startDefenceTime: '',
+    stopDefenceTime: '',
+    defenceIntervalTime: '',
+    planetName: '',
+    rival: ''
   });
   
   const [formData5, setFormData5] = useState<FormData>({
     RC: '',
-    Rival: '',
-    AttackTime: '',
-    IntervalTime: '',
-    DefenceTime: '',
-    PlanetName: ''
+    startAttackTime: '',
+    stopAttackTime: '',
+    attackIntervalTime: '',
+    startDefenceTime: '',
+    stopDefenceTime: '',
+    defenceIntervalTime: '',
+    planetName: '',
+    rival: ''
   });
   
   const [buttonStates1, setButtonStates1] = useState<ButtonStates>({
@@ -277,7 +295,7 @@ const GalaxyForm: React.FC = () => {
   
   const handleInputChange = (formNumber: number) => (e: React.ChangeEvent<HTMLInputElement>) => {
     const { name, value } = e.target;
-    const timeFields = ['AttackTime', 'IntervalTime', 'DefenceTime'];
+    const timeFields = ['startAttackTime', 'stopAttackTime', 'attackIntervalTime', 'startDefenceTime', 'stopDefenceTime', 'defenceIntervalTime'];
     
     if (timeFields.includes(name)) {
       const numericValue = value.replace(/\D/g, '').slice(0, 5);
@@ -449,11 +467,14 @@ const GalaxyForm: React.FC = () => {
   
     const inputFields = [
       { key: 'RC', type: 'text', maxLength: undefined, className: styles.input },
-      { key: 'Rival', type: 'text', maxLength: undefined, className: styles.input },
-      { key: 'AttackTime', type: 'text', maxLength: 5, className: `${styles.input} ${styles.timeInput}` },
-      { key: 'IntervalTime', type: 'text', maxLength: 5, className: `${styles.input} ${styles.timeInput}` },
-      { key: 'DefenceTime', type: 'text', maxLength: 5, className: `${styles.input} ${styles.timeInput}` },
-      { key: 'PlanetName', type: 'text', maxLength: undefined, className: styles.input }
+      { key: 'startAttackTime', type: 'text', maxLength: 5, className: `${styles.input} ${styles.timeInput}` },
+      { key: 'stopAttackTime', type: 'text', maxLength: 5, className: `${styles.input} ${styles.timeInput}` },
+      { key: 'attackIntervalTime', type: 'text', maxLength: 5, className: `${styles.input} ${styles.timeInput}` },
+      { key: 'startDefenceTime', type: 'text', maxLength: 5, className: `${styles.input} ${styles.timeInput}` },
+      { key: 'stopDefenceTime', type: 'text', maxLength: 5, className: `${styles.input} ${styles.timeInput}` },
+      { key: 'defenceIntervalTime', type: 'text', maxLength: 5, className: `${styles.input} ${styles.timeInput}` },
+      { key: 'planetName', type: 'text', maxLength: undefined, className: styles.input },
+      { key: 'rival', type: 'text', maxLength: undefined, className: styles.input }
     ];
   
     return (
