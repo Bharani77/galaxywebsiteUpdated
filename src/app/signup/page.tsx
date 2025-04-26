@@ -90,11 +90,20 @@ export default function SignUpPage() {
         try {
             if (!username.trim() || !password.trim()) {
                 showToast("Username and password cannot be empty.");
+                setIsLoading(false);
+                return;
+            }
+
+            // Add password validation
+            if (password.length < 8) {
+                showToast("Password must be at least 8 characters long.");
+                setIsLoading(false);
                 return;
             }
 
             if (!token.trim()) {
                 showToast("Token cannot be empty.");
+                setIsLoading(false);
                 return;
             }
 
