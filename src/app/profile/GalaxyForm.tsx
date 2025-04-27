@@ -465,43 +465,154 @@ const GalaxyForm: React.FC = () => {
       }
     })();
   
-    const inputFields = [
-      { key: 'RC', type: 'text', maxLength: undefined, className: styles.input },
-      { key: 'startAttackTime', type: 'text', maxLength: 5, className: `${styles.input} ${styles.timeInput}` },
-      { key: 'stopAttackTime', type: 'text', maxLength: 5, className: `${styles.input} ${styles.timeInput}` },
-      { key: 'attackIntervalTime', type: 'text', maxLength: 5, className: `${styles.input} ${styles.timeInput}` },
-      { key: 'startDefenceTime', type: 'text', maxLength: 5, className: `${styles.input} ${styles.timeInput}` },
-      { key: 'stopDefenceTime', type: 'text', maxLength: 5, className: `${styles.input} ${styles.timeInput}` },
-      { key: 'defenceIntervalTime', type: 'text', maxLength: 5, className: `${styles.input} ${styles.timeInput}` },
-      { key: 'PlanetName', type: 'text', maxLength: undefined, className: styles.input },
-      { key: 'Rival', type: 'text', maxLength: undefined, className: styles.input }
-    ];
-  
     return (
       <div className={styles.formContent} style={{ display: activeTab === formNumber ? 'block' : 'none' }}>
         {error && <div className="text-red-500 mb-4">{error}</div>}
         <div className={styles.form}>
-          {inputFields.map(({ key, type, maxLength, className }) => (
+          {/* RC Input */}
+          <div className={styles.inputGroup}>
             <input
-              key={key}
-              type={type}
-              name={key}
-              value={formData[key as keyof FormData]}
+              type="text"
+              name="RC"
+              value={formData.RC}
               onChange={handleInputChange(formNumber)}
-              placeholder={`${key}`}
-              className={className}
-              maxLength={maxLength}
+              placeholder="RC"
+              className={styles.input}
               autoComplete="off"
-              onFocus={(e) => e.target.setAttribute('autocomplete', 'off')}
               style={{
                 backgroundColor: 'rgba(25, 0, 0, 0.7)',
                 border: '1px solid rgba(255, 0, 0, 0.3)',
                 color: '#fff',
-                WebkitTextFillColor: '#fff'
+                width: '100%',
+                marginBottom: '10px'
               }}
             />
-          ))}
-          
+          </div>
+  
+          {/* Attack Time Group */}
+          <div className={styles.timeGroup}>
+            <input
+              type="text"
+              name="startAttackTime"
+              value={formData.startAttackTime}
+              onChange={handleInputChange(formNumber)}
+              placeholder="Start Attack Time"
+              className={`${styles.input} ${styles.timeInput}`}
+              maxLength={5}
+              style={{
+                backgroundColor: 'rgba(25, 0, 0, 0.7)',
+                border: '1px solid rgba(255, 0, 0, 0.3)',
+                color: '#fff'
+              }}
+            />
+            <input
+              type="text"
+              name="attackIntervalTime"
+              value={formData.attackIntervalTime}
+              onChange={handleInputChange(formNumber)}
+              placeholder="Attack Interval Time"
+              className={`${styles.input} ${styles.timeInput}`}
+              maxLength={5}
+              style={{
+                backgroundColor: 'rgba(25, 0, 0, 0.7)',
+                border: '1px solid rgba(255, 0, 0, 0.3)',
+                color: '#fff'
+              }}
+            />
+            <input
+              type="text"
+              name="stopAttackTime"
+              value={formData.stopAttackTime}
+              onChange={handleInputChange(formNumber)}
+              placeholder="Stop Attack Time"
+              className={`${styles.input} ${styles.timeInput}`}
+              maxLength={5}
+              style={{
+                backgroundColor: 'rgba(25, 0, 0, 0.7)',
+                border: '1px solid rgba(255, 0, 0, 0.3)',
+                color: '#fff'
+              }}
+            />
+          </div>
+  
+          {/* Defence Time Group */}
+          <div className={styles.timeGroup}>
+            <input
+              type="text"
+              name="startDefenceTime"
+              value={formData.startDefenceTime}
+              onChange={handleInputChange(formNumber)}
+              placeholder="Start Defence Time"
+              className={`${styles.input} ${styles.timeInput}`}
+              maxLength={5}
+              style={{
+                backgroundColor: 'rgba(25, 0, 0, 0.7)',
+                border: '1px solid rgba(255, 0, 0, 0.3)',
+                color: '#fff'
+              }}
+            />
+            <input
+              type="text"
+              name="defenceIntervalTime"
+              value={formData.defenceIntervalTime}
+              onChange={handleInputChange(formNumber)}
+              placeholder="Defence Interval Time"
+              className={`${styles.input} ${styles.timeInput}`}
+              maxLength={5}
+              style={{
+                backgroundColor: 'rgba(25, 0, 0, 0.7)',
+                border: '1px solid rgba(255, 0, 0, 0.3)',
+                color: '#fff'
+              }}
+            />
+            <input
+              type="text"
+              name="stopDefenceTime"
+              value={formData.stopDefenceTime}
+              onChange={handleInputChange(formNumber)}
+              placeholder="Stop Defence Time"
+              className={`${styles.input} ${styles.timeInput}`}
+              maxLength={5}
+              style={{
+                backgroundColor: 'rgba(25, 0, 0, 0.7)',
+                border: '1px solid rgba(255, 0, 0, 0.3)',
+                color: '#fff'
+              }}
+            />
+          </div>
+  
+          {/* Planet Name and Rival */}
+          <div className={styles.inputGroup}>
+            <input
+              type="text"
+              name="PlanetName"
+              value={formData.PlanetName}
+              onChange={handleInputChange(formNumber)}
+              placeholder="Planet Name"
+              className={styles.input}
+              style={{
+                backgroundColor: 'rgba(25, 0, 0, 0.7)',
+                border: '1px solid rgba(255, 0, 0, 0.3)',
+                color: '#fff',
+                marginBottom: '10px'
+              }}
+            />
+            <input
+              type="text"
+              name="Rival"
+              value={formData.Rival}
+              onChange={handleInputChange(formNumber)}
+              placeholder="Rival"
+              className={styles.input}
+              style={{
+                backgroundColor: 'rgba(25, 0, 0, 0.7)',
+                border: '1px solid rgba(255, 0, 0, 0.3)',
+                color: '#fff'
+              }}
+            />
+          </div>
+  
+          {/* Button Group */}
           <div className={styles.buttonGroup} style={{ gap: '8px', display: 'flex', flexWrap: 'wrap' }}>
             <button
               type="button"
