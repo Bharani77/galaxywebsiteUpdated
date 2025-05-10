@@ -1,5 +1,5 @@
-import React, { useState, useEffect } from 'react';
-import { Play, Square, RefreshCw, LogOut, CheckCircle } from 'lucide-react';
+import React, { useState, useEffect, useCallback } from 'react';
+import { Play, Square, RefreshCw, LogOut, CheckCircle, X } from 'lucide-react';
 import styles from '../styles/GalaxyControl.module.css';
 import { useRouter } from 'next/navigation';
 
@@ -49,25 +49,27 @@ const GalaxyForm: React.FC = () => {
   const [redeployMode, setRedeployMode] = useState<boolean>(false);
   const [showThankYouMessage, setShowThankYouMessage] = useState<boolean>(false);
   const [activationProgressTimerId, setActivationProgressTimerId] = useState<number | null>(null);
+  const [toastMessage, setToastMessage] = useState<string | null>(null);
+  const [activationProgressPercent, setActivationProgressPercent] = useState<number>(0);
 
-  const getApiAuthHeaders = (): Record<string, string> => {
-    const headers: Record<string, string> = {
-      'Content-Type': 'application/json',
-    };
-    const token = sessionStorage.getItem('sessionToken');
-    const userId = sessionStorage.getItem('userId');
-    const sessionId = sessionStorage.getItem('sessionId');
-
-    // Only add auth headers if all parts are present
-    if (token && userId && sessionId) {
-      headers['Authorization'] = `Bearer ${token}`;
-      headers['X-User-ID'] = userId;
-      headers['X-Session-ID'] = sessionId;
-    } else {
-      console.warn('Missing critical session data (token, userId, or sessionId) in sessionStorage. API calls will proceed without authentication headers.');
-    }
-    return headers;
+const getApiAuthHeaders = (): Record<string, string> => {
+  const headers: Record<string, string> = {
+    'Content-Type': 'application/json',
   };
+  const token = sessionStorage.getItem('sessionToken');
+  const userId = sessionStorage.getItem('userId');
+  const sessionId = sessionStorage.getItem('sessionId');
+
+  // Only add auth headers if all parts are present
+  if (token && userId && sessionId) {
+    headers['Authorization'] = `Bearer ${token}`;
+    headers['X-User-ID'] = userId;
+    headers['X-Session-ID'] = sessionId;
+  } else {
+    console.warn('Missing critical session data (token, userId, or sessionId) in sessionStorage. API calls will proceed without authentication headers.');
+  }
+  return headers;
+};
   
   const formNames = {
     1: 'Kick 1',
@@ -107,7 +109,8 @@ const GalaxyForm: React.FC = () => {
         setShowDeployPopup(true);
         return;
       }
-      const runsResponse = await fetch(`/git/galaxyapi/runs?status=in_progress&per_page=10`, { headers: authHeaders });
+      // Fetching fewer runs (e.g., 5 instead of 10) to speed up initial check for common cases.
+      const runsResponse = await fetch(`/git/galaxyapi/runs?status=in_progress&per_page=5`, { headers: authHeaders });
       if (runsResponse.ok) {
         const runsData = await runsResponse.json();
         const workflowRuns = runsData.workflow_runs || runsData;
@@ -160,14 +163,18 @@ const GalaxyForm: React.FC = () => {
   useEffect(() => {
     const storedUsername = sessionStorage.getItem('username');
     if (storedUsername) {
-      setDisplayedUsername(storedUsername); 
-      const suffix = '7890'; 
+      setDisplayedUsername(storedUsername);
+      const suffix = '7890';
       const logicalUsername = `${storedUsername}${suffix}`;
-      setUsername(logicalUsername); 
+      setUsername(logicalUsername);
+      // Immediately show popup and set status to checking.
+      // checkInitialDeploymentStatus will update/hide this based on the actual status.
+      setShowDeployPopup(true);
+      setDeploymentStatus('Checking deployment status...'); 
       checkInitialDeploymentStatus(logicalUsername);
     } else {
       setDeploymentStatus('Please sign in to manage deployments.');
-      setIsDeployed(false); 
+      setIsDeployed(false);
       setShowDeployPopup(true);
     }
      return () => {
@@ -323,20 +330,25 @@ const GalaxyForm: React.FC = () => {
             if (statusPollTimer !== null) window.clearInterval(statusPollTimer);
             setIsDeployed(true);
             setRedeployMode(false);
-            
-            let progress = 0;
-            setDeploymentStatus(`Activation progress: ${progress}s / 30s`);
-            setIsPollingStatus(true); 
+            setDeploymentStatus('Finalizing KickLock activation...'); // New status message
+            setIsPollingStatus(true);
+            setActivationProgressPercent(0); // Reset progress
+
+            let currentProgress = 0;
+            const totalDuration = 30; // seconds
 
             const newActivationTimerId = window.setInterval(() => {
-              progress += 1; 
-              setDeploymentStatus(`Activation progress: ${progress}s / 30s`);
-              if (progress >= 30) {
+              currentProgress += 1;
+              const percent = Math.min(100, (currentProgress / totalDuration) * 100);
+              setActivationProgressPercent(percent);
+
+              if (currentProgress >= totalDuration) {
                 window.clearInterval(newActivationTimerId);
                 setActivationProgressTimerId(null);
                 setShowDeployPopup(false);
-                setIsPollingStatus(false); 
-                setDeploymentStatus('KickLock activated successfully!'); 
+                setIsPollingStatus(false);
+                setActivationProgressPercent(100); // Ensure it hits 100
+                setDeploymentStatus('KickLock activated successfully!');
               }
             }, 1000);
             setActivationProgressTimerId(newActivationTimerId);
@@ -448,7 +460,7 @@ const GalaxyForm: React.FC = () => {
     setButtonStates3(initialButtonStates);
     setButtonStates4(initialButtonStates);
     setButtonStates5(initialButtonStates);
-    setError1(''); setError2(''); setError3(''); setError4(''); setError5('');
+    setError1([]); setError2([]); setError3([]); setError4([]); setError5([]);
 
     setIsUndeploying(true); 
     setShowDeployPopup(true); 
@@ -565,7 +577,7 @@ const GalaxyForm: React.FC = () => {
       setIsDeploying(false); 
 
       if (response.status === 204) {
-        setDeploymentStatus('Workflow dispatched via backend. Waiting 10s for GitHub to initialize run...');
+        setDeploymentStatus('Waiting 10s for to initialize run...');
         setIsPollingStatus(true); 
         setShowDeployPopup(true); 
 
@@ -601,11 +613,21 @@ const GalaxyForm: React.FC = () => {
   const [buttonStates4, setButtonStates4] = useState<ButtonStates>(initialButtonStates);
   const [buttonStates5, setButtonStates5] = useState<ButtonStates>(initialButtonStates);
   
-  const [error1, setError1] = useState('');
-  const [error2, setError2] = useState('');
-  const [error3, setError3] = useState('');
-  const [error4, setError4] = useState('');
-  const [error5, setError5] = useState('');
+  const [error1, setError1] = useState<string[]>([]);
+  const [error2, setError2] = useState<string[]>([]);
+  const [error3, setError3] = useState<string[]>([]);
+  const [error4, setError4] = useState<string[]>([]);
+  const [error5, setError5] = useState<string[]>([]);
+
+  useEffect(() => {
+    let timer: NodeJS.Timeout;
+    if (toastMessage) {
+      timer = setTimeout(() => {
+        setToastMessage(null);
+      }, 5000); // Hide toast after 5 seconds
+    }
+    return () => clearTimeout(timer);
+  }, [toastMessage]);
   
   const handleInputChange = (formNumber: number) => (e: React.ChangeEvent<HTMLInputElement>) => {
     const { name, value } = e.target;
@@ -649,19 +671,45 @@ const GalaxyForm: React.FC = () => {
         case 4: return formData4; case 5: return formData5; default: return formData1;
       }
     })();
+
+    // --- Start Validation ---
+    const requiredFields: (keyof FormData)[] = ['RC', 'startAttackTime', 'stopAttackTime', 'attackIntervalTime', 'startDefenceTime', 'stopDefenceTime', 'defenceIntervalTime', 'PlanetName', 'Rival'];
+    const emptyFields = requiredFields.filter(field => !formData[field]);
+
+    if (emptyFields.length > 0) {
+      const fieldDisplayNames = {
+        RC: 'RC',
+        startAttackTime: 'Start Attack Time',
+        stopAttackTime: 'Stop Attack Time',
+        attackIntervalTime: 'Attack Interval Time',
+        startDefenceTime: 'Start Defence Time',
+        stopDefenceTime: 'Stop Defence Time',
+        defenceIntervalTime: 'Defence Interval Time',
+        PlanetName: 'Planet Name',
+        Rival: 'Rival'
+      };
+      const emptyFieldNames = emptyFields.map(field => fieldDisplayNames[field] || field).join(', ');
+      setError(emptyFields);
+      setToastMessage(`Please fill all highlighted fields.`);
+      // Reset button state as action was not performed
+      setButtonStates(prev => ({ ...prev, [action]: { ...prev[action], loading: false, active: false, text: action } }));
+      return; // Stop execution if validation fails
+    }
+    // --- End Validation ---
+
     setButtonStates(prev => ({ ...prev, [action]: { ...prev[action], loading: true } }));
-    setError('');
+    setError([]);
 
     const authHeaders = getApiAuthHeaders();
     if (!authHeaders['Authorization']) {
-      setError('Authentication details missing. Please sign in again.');
+      setError(['Authentication details missing. Please sign in again.']);
       setButtonStates(prev => ({ ...prev, [action]: { ...prev[action], loading: false } }));
       return;
     }
 
     try {
       if (!username) {
-        setError('Logical username not available. Cannot perform action.');
+        setError(['Logical username not available. Cannot perform action.']);
         setButtonStates(prev => ({ ...prev, [action]: { ...prev[action], loading: false } }));
         return;
       }
@@ -671,13 +719,13 @@ const GalaxyForm: React.FC = () => {
       }, {} as Record<string, string>);
 
       const response = await fetch(`/api/localt/action`, {
-        method: 'POST', 
-        headers: authHeaders, 
+        method: 'POST',
+        headers: authHeaders,
         body: JSON.stringify({
           action: action,
           formNumber: formNumber,
           formData: modifiedFormData,
-          logicalUsername: username 
+          logicalUsername: username
         })
       });
 
@@ -687,22 +735,22 @@ const GalaxyForm: React.FC = () => {
           ...(action === 'stop' ? { start: { ...prev.start, active: false, text: 'Start' }, } : {}),
           ...(action === 'update' ? { update: { loading: false, active: true, text: 'Updated' } } : {})
         }));
-        setError(''); 
+        setError([]);
       } else {
         const errorText = await response.text();
         const errorData = JSON.parse(errorText || '{ "message": "Unknown error" }');
         console.error(`Error performing action ${action} for form ${formNumber} via backend:`, errorData);
-        if (action === 'start') { setError(`Unable to start: ${errorData.message || 'Please try again'}`); } 
-        else { setError(`Unable to ${action}: ${errorData.message || 'Please try again'}`); }
+        if (action === 'start') { setError([`Unable to start: ${errorData.message || 'Please try again'}`]); }
+        else { setError([`Unable to ${action}: ${errorData.message || 'Please try again'}`]); }
         setButtonStates(prev => ({ ...prev, [action]: { ...prev[action], loading: false, active: false, text: action } }));
       }
     } catch (error) {
       console.error(`Client-side error performing action ${action} for form ${formNumber}:`, error);
-      setError(`Unable to ${action}: Network error or client-side issue.`);
+      setError([`Unable to ${action}: Network error or client-side issue.`]);
       setButtonStates(prev => ({ ...prev, [action]: { ...prev[action], loading: false, active: false, text: action } }));
     }
   };
-  
+
   const renderForm = (formNumber: number) => {
     const formData = (() => {
       switch(formNumber) { case 1: return formData1; case 2: return formData2; case 3: return formData3; case 4: return formData4; case 5: return formData5; default: return formData1;}
@@ -726,25 +774,24 @@ const GalaxyForm: React.FC = () => {
     ];
     return (
       <div className={styles.formContent} style={{ display: activeTab === formNumber ? 'block' : 'none' }}>
-        {error && <div className="text-red-500 mb-4">{error}</div>}
         <div className={styles.form}>
           {inputFields.map(({ key, label, color, type, maxLength, className }) => (
             <div key={key} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
               <label style={{ color: color, marginBottom: '0.5rem', textAlign: 'center' }}>{label}</label>
-              <input type={type} name={key} value={formData[key as keyof FormData]} onChange={handleInputChange(formNumber)} className={className} maxLength={maxLength} autoComplete="off" onFocus={(e) => e.target.setAttribute('autocomplete', 'off')} style={{ backgroundColor: 'rgba(25, 0, 0, 0.7)', border: '1px solid rgba(255, 0, 0, 0.3)', color: '#fff', WebkitTextFillColor: '#fff', width: '100%', padding: '0.5rem', boxSizing: 'border-box' }} />
+              <input type={type} name={key} value={formData[key as keyof FormData]} onChange={handleInputChange(formNumber)} className={className} maxLength={maxLength} autoComplete="off" onFocus={(e) => e.target.setAttribute('autocomplete', 'off')} style={{ backgroundColor: 'rgba(25, 0, 0, 0.7)', border: error.includes(key) ? '1px solid red' : '1px solid rgba(255, 0, 0, 0.3)', color: '#fff', WebkitTextFillColor: '#fff', width: '100%', padding: '0.5rem', boxSizing: 'border-box' }} title={error.includes(key) ? 'This field is required' : undefined} />
             </div>
           ))}
           <div className={styles.buttonGroup} style={{ gap: '20px', display: 'flex', justifyContent: 'center', marginTop: '1rem' }}>
-            <button type="button" onClick={() => handleAction(formNumber)('start')} className={`${styles.button} ${buttonStates.start.loading ? styles.loadingButton : ''} ${buttonStates.start.active ? styles.buttonRunning : ''}`} disabled={buttonStates.start.loading} style={{ backgroundColor: buttonStates.start.active ? '#22c55e' : undefined }} > <Play size={16} /> <span>Start</span> </button>
-            <button type="button" onClick={() => handleAction(formNumber)('stop')} className={`${styles.button} ${buttonStates.stop.loading ? styles.loadingButton : ''} ${buttonStates.stop.active ? styles.buttonStopped : ''}`} disabled={buttonStates.stop.loading} > <Square size={16} /> <span>Stop</span> </button>
-            <button type="button" onClick={() => handleAction(formNumber)('update')} className={`${styles.button} ${buttonStates.update.loading ? styles.loadingButton : ''} ${buttonStates.update.active ? styles.buttonUpdated : ''}`} disabled={buttonStates.update.loading} style={{ backgroundColor: buttonStates.update.active ? '#3b82f6' : undefined }} > <RefreshCw size={16} /> <span>Update</span> </button>
+            <button type="button" onClick={() => handleAction(formNumber)('start')} className={`${styles.button} ${buttonStates.start.loading ? styles.loadingButton : ''} ${buttonStates.start.active ? styles.buttonRunning : ''}`} disabled={!isDeployed || isDeploying || isPollingStatus || isUndeploying || buttonStates.start.loading} style={{ backgroundColor: buttonStates.start.active ? '#22c55e' : undefined }} > <Play size={16} /> <span>Start</span> </button>
+            <button type="button" onClick={() => handleAction(formNumber)('stop')} className={`${styles.button} ${buttonStates.stop.loading ? styles.loadingButton : ''} ${buttonStates.stop.active ? styles.buttonStopped : ''}`} disabled={!isDeployed || isDeploying || isPollingStatus || isUndeploying || buttonStates.stop.loading} > <Square size={16} /> <span>Stop</span> </button>
+            <button type="button" onClick={() => handleAction(formNumber)('update')} className={`${styles.button} ${buttonStates.update.loading ? styles.loadingButton : ''} ${buttonStates.update.active ? styles.buttonUpdated : ''}`} disabled={!isDeployed || isDeploying || isPollingStatus || isUndeploying || buttonStates.update.loading} style={{ backgroundColor: buttonStates.update.active ? '#3b82f6' : undefined }} > <RefreshCw size={16} /> <span>Update</span> </button>
             {renderStatusButton()}
           </div>
         </div>
       </div>
     );
   };
-  
+
   const renderStatusButton = () => {
     if (isDeployed) {
       return ( <button onClick={handleUndeploy} disabled={isUndeploying} className={`${styles.button}`} style={{ minWidth: '120px', backgroundColor: '#22c55e', border: 'none' }} > {isUndeploying ? ( <> <RefreshCw size={16} /> <span>Undeploying...</span> </> ) : ( <> <CheckCircle size={16} /> <span>Deployed</span> </> )} </button> );
@@ -752,11 +799,19 @@ const GalaxyForm: React.FC = () => {
       return ( <button onClick={() => setShowDeployPopup(true)} className={`${styles.button}`} style={{ minWidth: '120px', backgroundColor: '#dc2626', border: 'none' }} > <RefreshCw size={16} /> <span>Deploy</span> </button> );
     }
   };
-  
+
   return (
     <div className={styles.container}>
+      {toastMessage && (
+        <div style={{ position: 'fixed', top: '20px', right: '20px', backgroundColor: '#f87171' /* A slightly softer red */, color: 'white', padding: '12px 20px', borderRadius: '6px', zIndex: 2000, display: 'flex', alignItems: 'center', boxShadow: '0 4px 12px rgba(0,0,0,0.15)' }}>
+          <span>{toastMessage}</span>
+          <button onClick={() => setToastMessage(null)} style={{ background: 'none', border: 'none', color: 'white', marginLeft: '15px', cursor: 'pointer', fontSize: '18px', lineHeight: '1' }}>
+            <X size={20} />
+          </button>
+        </div>
+      )}
       <div className={styles.header} style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', padding: '0px', backgroundColor: '#1a1a1a', borderRadius: '0px', margin: '0 0 20px 0', position: 'relative' }}>
-        {displayedUsername && ( <div style={{ color: '#fff', fontWeight: 'bold', fontSize: '1.1rem', position: 'absolute', left: '-625px', top: '-15px', display: 'flex', alignItems: 'center' }}> <span style={{ marginRight: '4px' }}>Welcome:</span> <span>{displayedUsername}</span> </div> )}
+        {displayedUsername && ( <div style={{ color: '#fff', fontWeight: 'bold', fontSize: '1.1rem', position: 'absolute', left: '-770px', top: '-25px', display: 'flex', alignItems: 'center' }}> <span style={{ marginRight: '4px' }}>Welcome:</span> <span>{displayedUsername}</span> </div> )}
         <div style={{ marginLeft: 'auto' }}> <button onClick={handleLogout} className={`${styles.button} ${styles.logoutButton}`} > <LogOut size={16} /> <span>Logout</span> </button> </div>
       </div>
       <h1 className={styles.title}> <span className={styles.kickLock}>KICK ~ LOCK</span> </h1>
@@ -769,13 +824,51 @@ const GalaxyForm: React.FC = () => {
       {showDeployPopup && (
         <div style={{ position: 'fixed', top: 0, left: 0, width: '100%', height: '100%', backgroundColor: 'rgba(0, 0, 0, 0.7)', display: 'flex', justifyContent: 'center', alignItems: 'center', zIndex: 1000 }}>
           <div style={{ backgroundColor: '#1a1a1a', borderRadius: '8px', padding: '20px', width: '350px', boxShadow: '0 4px 20px rgba(0, 0, 0, 0.5)', border: '1px solid #333', textAlign: 'center' }}>
-            <h2 style={{ color: '#fff', marginBottom: '15px' }}> {isDeployed ? 'KickLock Active' : 'Deploy KickLock'} </h2>
-            <p style={{ color: '#aaa', marginBottom: '20px', fontSize: '0.9rem', minHeight: '40px' }}> {deploymentStatus} </p>
-            <div style={{ display: 'flex', justifyContent: 'center' }}>
-              {!isDeployed || redeployMode ? ( <button onClick={handleDeploy} disabled={isDeploying || isPollingStatus} style={{ padding: '10px 20px', borderRadius: '4px', border: 'none', backgroundColor: (isDeploying || isPollingStatus) ? '#555' : (redeployMode ? '#e67e22' : '#d32f2f'), color: 'white', fontWeight: 'bold', cursor: (isDeploying || isPollingStatus) ? 'not-allowed' : 'pointer', opacity: (isDeploying || isPollingStatus) ? 0.7 : 1, transition: 'all 0.3s ease', width: '100%' }} > {isDeploying ? 'Dispatching...' : isPollingStatus ? 'Checking Status...' : (redeployMode ? 'Redeploy Again' : 'Deploy KickLock')} </button>
-              ) : ( <p style={{color: '#22c55e'}}>Deployment is active!</p> )}
+            <h2 style={{ color: '#fff', marginBottom: '15px' }}> 
+              {isDeployed && isPollingStatus && activationProgressTimerId !== null ? 'Activating KickLock' : isDeployed ? 'KickLock Active' : 'Deploy KickLock'}
+            </h2>
+            <p style={{ color: '#aaa', marginBottom: '10px', fontSize: '0.9rem', minHeight: '20px' }}> {deploymentStatus} </p>
+            
+            {isDeployed && isPollingStatus && activationProgressTimerId !== null && (
+              <div style={{ marginBottom: '20px', width: '100%', backgroundColor: '#333', borderRadius: '4px', overflow: 'hidden' }}>
+                <div 
+                  style={{ 
+                    width: `${activationProgressPercent}%`, 
+                    height: '10px', 
+                    backgroundColor: '#22c55e', // Green progress
+                    transition: 'width 0.5s ease-in-out'
+                  }}
+                />
+              </div>
+            )}
+
+            <div style={{ display: 'flex', justifyContent: 'center', marginTop: (isDeployed && isPollingStatus && activationProgressTimerId !== null) ? '0' : '20px' }}>
+              {(!isDeployed || redeployMode) && !(isDeployed && isPollingStatus && activationProgressTimerId !== null) ? ( 
+                <button 
+                  onClick={handleDeploy} 
+                  disabled={isDeploying || (isPollingStatus && activationProgressTimerId === null) } // Disable if deploying or initial polling
+                  style={{ 
+                    padding: '10px 20px', 
+                    borderRadius: '4px', 
+                    border: 'none', 
+                    backgroundColor: (isDeploying || (isPollingStatus && activationProgressTimerId === null)) ? '#555' : (redeployMode ? '#e67e22' : '#d32f2f'), 
+                    color: 'white', 
+                    fontWeight: 'bold', 
+                    cursor: (isDeploying || (isPollingStatus && activationProgressTimerId === null)) ? 'not-allowed' : 'pointer', 
+                    opacity: (isDeploying || (isPollingStatus && activationProgressTimerId === null)) ? 0.7 : 1, 
+                    transition: 'all 0.3s ease', 
+                    width: '100%' 
+                  }} 
+                > 
+                  {isDeploying ? 'Dispatching...' : (isPollingStatus && activationProgressTimerId === null) ? 'Checking Status...' : (redeployMode ? 'Redeploy Again' : 'Deploy KickLock')} 
+                </button>
+              ) : isDeployed && !(isPollingStatus && activationProgressTimerId !== null) ? (
+                 <p style={{color: '#22c55e'}}>Deployment is active!</p> 
+              ) : null}
             </div>
-            {(!isPollingStatus && !isDeploying && !isDeployed && !redeployMode) && ( <button onClick={() => setShowDeployPopup(false)} style={{marginTop: '15px', background: 'none', border: '1px solid #555', color: '#aaa', padding: '5px 10px', borderRadius: '4px'}}> Close </button> )}
+            {(!isPollingStatus && !isDeploying && !isDeployed && !redeployMode && activationProgressTimerId === null) && ( 
+              <button onClick={() => setShowDeployPopup(false)} style={{marginTop: '15px', background: 'none', border: '1px solid #555', color: '#aaa', padding: '5px 10px', borderRadius: '4px'}}> Close </button> 
+            )}
           </div>
         </div>
       )}
