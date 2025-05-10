@@ -24,6 +24,7 @@ interface TokenUser {
     userId: string | null;
 }
 
+import { X } from 'lucide-react';
 export default function AdminDashboardPage() {
     const router = useRouter();
     
@@ -157,7 +158,11 @@ export default function AdminDashboardPage() {
             const authHeaders = getAdminApiAuthHeaders();
             if (!authHeaders['X-Admin-ID']) {
                 showToast("Admin authentication details missing for generating token.");
-                setIsLoading((prev) => ({ ...prev, [duration]: false }));
+                setIsLoading((prev) => {
+                    const newState = { ...prev };
+                    newState[duration] = false;
+                    return newState;
+                });
                 return;
             }
 
@@ -190,6 +195,11 @@ export default function AdminDashboardPage() {
                 updateActiveTokens(updatedHistory); // This will update the displayed active token
 
                 showToast('Token generated successfully!');
+                setIsLoading((prev) => {
+                    const newState = { ...prev };
+                    newState[duration] = false;
+                    return newState;
+                });
             } else {
                 showToast('Error: Invalid data received from server after token generation.');
             }
@@ -202,9 +212,13 @@ export default function AdminDashboardPage() {
             }
             console.error('Error in generateToken:', error);
             showToast(`Error: ${errorMessage}`);
-        } finally {
-            setIsLoading((prev) => ({ ...prev, [duration]: false }));
         }
+        // Remove the finally block and move setIsLoading(false) to after the UI updates
+        setIsLoading((prev) => {
+            const newState = { ...prev };
+            newState[duration] = false;
+            return newState;
+        });
     };
 
     // Function to delete a token
@@ -578,8 +592,11 @@ export default function AdminDashboardPage() {
 
                 {/* Toast Notification */}
                 {toastMessage && (
-                    <div className="fixed top-4 right-4 text-white px-4 py-2 rounded-lg shadow-lg" style={{ backgroundColor: '#f87171' }}>
-                        {toastMessage}
+                    <div style={{ position: 'fixed', top: '20px', right: '20px', backgroundColor: '#f87171', color: 'white', padding: '12px 20px', borderRadius: '6px', zIndex: 2000, display: 'flex', alignItems: 'center', boxShadow: '0 4px 12px rgba(0,0,0,0.15)' }}>
+                        <span>{toastMessage}</span>
+                        <button onClick={() => setToastMessage(null)} style={{ background: 'none', border: 'none', color: 'white', marginLeft: '15px', cursor: 'pointer', fontSize: '18px', lineHeight: '1' }}>
+                            <X size={20} />
+                        </button>
                     </div>
                 )}
 
