@@ -112,11 +112,11 @@ const getApiAuthHeaders = (): Record<string, string> => {
       // Fetching fewer runs (e.g., 5 instead of 10) to speed up initial check for common cases.
       const runsResponse = await fetch(`/git/galaxyapi/runs?status=in_progress&per_page=5`, { headers: authHeaders });
       if (runsResponse.ok) {
-        const runsData = await runsResponse.json();
-        const workflowRuns = runsData.workflow_runs || runsData;
-        if (!Array.isArray(workflowRuns)) {
-          console.error("Invalid runs data received from backend:", workflowRuns);
-          setIsDeployed(false);
+       const runsData = await runsResponse.json();
+       const workflowRuns = runsData.rawData?.workflow_runs || runsData;
+       if (!Array.isArray(workflowRuns)) {
+         console.error("Invalid runs data received from backend:", workflowRuns);
+         setIsDeployed(false);
           setShowDeployPopup(true);
           setDeploymentStatus('Error fetching deployment status.');
           return;
@@ -240,7 +240,7 @@ const getApiAuthHeaders = (): Record<string, string> => {
           throw new Error(`Failed to fetch workflow runs from backend: ${runsResponse.status} ${errorData.message || errorText}`);
         }
         const runsData = await runsResponse.json();
-        const workflowRuns = runsData.workflow_runs || runsData; 
+        const workflowRuns = runsData.rawData?.workflow_runs || runsData;
          if (!Array.isArray(workflowRuns)) {
           console.error("Invalid runs data received from backend:", workflowRuns);
           throw new Error('Invalid runs data from backend.');
@@ -487,10 +487,10 @@ const getApiAuthHeaders = (): Record<string, string> => {
       }
       
       const runsData = await runsResponse.json();
-      const workflowRuns = runsData.workflow_runs || runsData; 
+      const workflowRuns = runsData.rawData?.workflow_runs || runsData;
       if (!Array.isArray(workflowRuns)) {
-        console.error("Invalid runs data received from backend for undeploy:", workflowRuns);
-        throw new Error('Invalid runs data from backend for undeploy.');
+       console.error("Invalid runs data received from backend for undeploy:", workflowRuns);
+       throw new Error('Invalid runs data from backend for undeploy.');
       }
       const sortedRuns = workflowRuns.sort((a: any, b: any) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
       console.log(`handleUndeploy: Found ${sortedRuns.length} in-progress runs from backend.`);

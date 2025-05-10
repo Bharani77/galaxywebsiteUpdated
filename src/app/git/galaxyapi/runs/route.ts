@@ -50,6 +50,7 @@ async function fetchFromGitHub(url: string, options: RequestInit = {}) {
   // For other successful GETs (typically 200 with data)
   try {
     const rawData = await response.json();
+    console.log("Raw data received from GitHub API:", rawData); // Add this line
     return NextResponse.json({ rawData, status: response.status, ok: true }, { status: response.status });
   } catch (e: any) {
     // If response.json() fails (e.g. empty body but status 200, or malformed JSON from GitHub)
