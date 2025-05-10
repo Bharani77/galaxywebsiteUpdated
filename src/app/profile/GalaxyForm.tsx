@@ -29,17 +29,37 @@ type ButtonStates = {
 
 type ActionType = keyof ButtonStates;
 
+const initialButtonStates: ButtonStates = {
+  start: { loading: false, active: false, text: 'Start' },
+  stop: { loading: false, active: false, text: 'Stop' },
+  update: { loading: false, active: false, text: 'Update' },
+};
+
 const GalaxyForm: React.FC = () => {
   const router = useRouter();
   const [activeTab, setActiveTab] = useState<number>(1);
-  const [username, setUsername] = useState<string | null>(null);
-  const [showDeployPopup, setShowDeployPopup] = useState<boolean>(false);
+  const [username, setUsername] = useState<string | null>(null); 
+  const [displayedUsername, setDisplayedUsername] = useState<string | null>(null);
+  const [showDeployPopup, setShowDeployPopup] = useState<boolean>(false); 
   const [isDeploying, setIsDeploying] = useState<boolean>(false);
   const [isUndeploying, setIsUndeploying] = useState<boolean>(false);
-  const [deploymentStatus, setDeploymentStatus] = useState<string>('');
+  const [deploymentStatus, setDeploymentStatus] = useState<string>('Checking deployment status...'); 
   const [isDeployed, setIsDeployed] = useState<boolean>(false);
-  const [isCheckingStatus, setIsCheckingStatus] = useState<boolean>(true);
+  const [isPollingStatus, setIsPollingStatus] = useState<boolean>(false);
+  const [redeployMode, setRedeployMode] = useState<boolean>(false);
   const [showThankYouMessage, setShowThankYouMessage] = useState<boolean>(false);
+  const [activationProgressTimerId, setActivationProgressTimerId] = useState<number | null>(null);
+  
+  const GITHUB_TOKEN = process.env.NEXT_PUBLIC_GITHUB_TOKEN;
+  const ORG = 'GalaxyKickLock';
+  const REPO = 'GalaxyKickPipeline';
+  const WORKFLOW_FILE_NAME = 'blank.yml';
+
+  const apiHeaders = {
+    'Accept': 'application/vnd.github+json',
+    'Authorization': `token ${GITHUB_TOKEN}`,
+    'X-GitHub-Api-Version': '2022-11-28'
+  };
   
   const formNames = {
     1: 'Kick 1',
@@ -50,240 +70,481 @@ const GalaxyForm: React.FC = () => {
   };
   
   const handleLogout = async () => {
+    if (activationProgressTimerId !== null) {
+      window.clearInterval(activationProgressTimerId);
+      setActivationProgressTimerId(null);
+    }
     if (isDeployed) {
+      setShowDeployPopup(true); 
       try {
-        setIsUndeploying(true);
-        const response = await fetch('https://buddymaster77hugs-gradio1.hf.space/api/undeploy', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json'
-          },
-          body: JSON.stringify({
-            modal_name: username
-          })
-        });
-  
-        if (!response.ok) {
-          const errorData = await response.json();
-          alert(`Undeployment failed: ${errorData.message || 'Unknown error'}`);
-          return;
-        }
-        
-        setIsDeployed(false);
-        setDeploymentStatus('');
-        setShowDeployPopup(false);
-        setShowThankYouMessage(false);
-      } catch (error) {
-        alert(`Undeployment error: ${error instanceof Error ? error.message : 'Unknown error'}`);
-        return;
-      } finally {
-        setIsUndeploying(false);
+        await handleUndeploy(); 
+      } catch (err) {
+        console.error("Error during undeploy on logout:", err);
       }
     }
-    
     sessionStorage.clear();
     router.push('/signin');
+  };
+
+  const checkInitialDeploymentStatus = async (logicalUsername: string) => {
+    if (!GITHUB_TOKEN) {
+      console.warn("GitHub token not available for initial status check.");
+      setIsDeployed(false);
+      setShowDeployPopup(true);
+      setDeploymentStatus('Deployment is required (token configuration issue).');
+      return;
+    }
+    const jobNameToFind = `Run for ${logicalUsername}`;
+    let isActiveRunFound = false;
+    console.log(`Checking initial deployment status for: ${jobNameToFind}`);
+  
+    try {
+      const runsResponse = await fetch(`https://api.github.com/repos/${ORG}/${REPO}/actions/workflows/${WORKFLOW_FILE_NAME}/runs?status=in_progress&per_page=10`, { headers: apiHeaders });
+      if (runsResponse.ok) {
+        const runsData = await runsResponse.json();
+        const sortedRuns = runsData.workflow_runs.sort((a: any, b: any) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+  
+        for (const run of sortedRuns) {
+          const jobsResponse = await fetch(run.jobs_url, { headers: apiHeaders });
+          if (jobsResponse.ok) {
+            const jobsData = await jobsResponse.json();
+            if (jobsData.jobs && jobsData.jobs.find((job: any) => job.name === jobNameToFind)) {
+              isActiveRunFound = true;
+              console.log(`Active deployment found on page load (Run ID: ${run.id}).`);
+              setIsDeployed(true);
+              setShowDeployPopup(false); 
+              setDeploymentStatus(`Active deployment detected (Run ID: ${run.id}).`);
+              break;
+            }
+          }
+        }
+      } else {
+        console.error("Failed to fetch initial runs status:", await runsResponse.text());
+      }
+    } catch (error) {
+      console.error("Error checking initial deployment status:", error);
+    }
+  
+    if (!isActiveRunFound) {
+      setIsDeployed(false);
+      setShowDeployPopup(true);
+      setDeploymentStatus('Deployment is required to use KickLock features.');
+    }
   };
 
   useEffect(() => {
     const storedUsername = sessionStorage.getItem('username');
     if (storedUsername) {
-      setUsername(storedUsername);
-      checkDeploymentStatus(storedUsername);
+      setDisplayedUsername(storedUsername); 
+      const suffix = '7890'; 
+      const logicalUsername = `${storedUsername}${suffix}`;
+      setUsername(logicalUsername); 
+      checkInitialDeploymentStatus(logicalUsername);
     } else {
-      setIsCheckingStatus(false);
+      setDeploymentStatus('Please sign in to manage deployments.');
+      setIsDeployed(false); 
+      setShowDeployPopup(true);
     }
-  }, []);
-
-  const checkDeploymentStatus = async (username: string) => {
-    setIsCheckingStatus(true);
-    let isAlreadyDeployed = false;
-    
-    try {
-      const response = await fetch('https://buddymaster77hugs-gradio1.hf.space/api/status', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({
-          modal_name: username
-        })
-      });
-
-      if (response.ok) {
-        const data = await response.json();
-        if (data.status === "deployed") {
-          isAlreadyDeployed = true;
-          setIsDeployed(true);
-        }
+     return () => {
+      if (activationProgressTimerId !== null) {
+        window.clearInterval(activationProgressTimerId);
       }
-    } catch (error) {
-      console.error("Error checking deployment status:", error);
-    } finally {
-      setIsCheckingStatus(false);
-      setShowDeployPopup(!isAlreadyDeployed);
+    };
+  }, [router]);
+
+  const startDeploymentCheck = async (currentLogicalUsername: string | null) => {
+    if (!currentLogicalUsername) {
+      setDeploymentStatus('Logical username not available for status check.');
+      setIsPollingStatus(false); 
+      return;
     }
+    if (activationProgressTimerId !== null) { 
+      window.clearInterval(activationProgressTimerId);
+      setActivationProgressTimerId(null);
+    }
+
+    if (!isPollingStatus) setIsPollingStatus(true); 
+    setRedeployMode(false);
+
+    if (!GITHUB_TOKEN) {
+      setDeploymentStatus('Deployment failed: GitHub token not configured.');
+      setIsPollingStatus(false);
+      setRedeployMode(true);
+      return;
+    }
+
+    const jobNameToFind = `Run for ${currentLogicalUsername}`;
+    console.log(`Initiating workflow run search. Target job name: "${jobNameToFind}"`);
+
+    let foundRunId: number | null = null; 
+    const findRunIdTimeoutDuration = 30 * 1000;
+    const findRunIdInterval = 5 * 1000;
+    const findRunIdStartTime = Date.now();
+    let findRunIdTimer: number | null = null;
+
+    const attemptToFindRunId = async () => {
+      console.log('Attempting to find workflow run ID...');
+      if (Date.now() - findRunIdStartTime <= findRunIdTimeoutDuration && !foundRunId) {
+        setDeploymentStatus(`Locating workflow run (attempt ${Math.floor((Date.now() - findRunIdStartTime) / findRunIdInterval) + 1})...`);
+      }
+
+      if (Date.now() - findRunIdStartTime > findRunIdTimeoutDuration) {
+        if (findRunIdTimer !== null) window.clearInterval(findRunIdTimer);
+        if (!foundRunId) { 
+          console.error(`Timeout: Could not find a workflow run with job "${jobNameToFind}" within ${findRunIdTimeoutDuration / 1000} seconds.`);
+          setDeploymentStatus('Could not locate the triggered workflow run in time. Please check GitHub Actions or try again.');
+          setIsPollingStatus(false);
+          setRedeployMode(true);
+        }
+        return;
+      }
+
+      try {
+        const runsResponse = await fetch(`https://api.github.com/repos/${ORG}/${REPO}/actions/workflows/${WORKFLOW_FILE_NAME}/runs?per_page=30`, { headers: apiHeaders });
+        if (!runsResponse.ok) {
+          const errorData = await runsResponse.json().catch(() => ({ message: 'Failed to parse error response' }));
+          throw new Error(`Failed to fetch workflow runs: ${runsResponse.status} ${errorData.message || runsResponse.statusText}`);
+        }
+        const runsData = await runsResponse.json();
+        const sortedRuns = runsData.workflow_runs.sort((a: any, b: any) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+        console.log(`Fetched ${sortedRuns.length} runs in current attempt.`);
+
+        for (const run of sortedRuns) {
+          console.log(`Checking run ID: ${run.id}, Created: ${run.created_at}, Status: ${run.status}, URL: ${run.html_url}`);
+          const jobsResponse = await fetch(run.jobs_url, { headers: apiHeaders });
+          if (jobsResponse.ok) {
+            const jobsData = await jobsResponse.json();
+            if (jobsData.jobs && jobsData.jobs.length > 0) {
+              console.log(`Jobs for run ${run.id}:`, jobsData.jobs.map((j: any) => j.name));
+              const matchingJob = jobsData.jobs.find((job: any) => job.name === jobNameToFind);
+              if (matchingJob) {
+                console.log(`Found matching job "${matchingJob.name}" in run ${run.id}.`);
+                foundRunId = run.id; 
+                break;
+              }
+            } else {
+              console.log(`No jobs listed for run ${run.id} yet.`);
+            }
+          } else {
+            console.warn(`Failed to fetch jobs for run ${run.id}. Status: ${jobsResponse.status}`);
+          }
+        }
+
+        if (foundRunId) { 
+          if (findRunIdTimer !== null) window.clearInterval(findRunIdTimer);
+          console.log(`Successfully found run ID: ${foundRunId}. Proceeding to status polling.`); 
+          pollRunStatus(foundRunId); 
+        } else {
+           if (Date.now() - findRunIdStartTime <= findRunIdTimeoutDuration - findRunIdInterval) {
+             console.log(`Run ID not found in this attempt. Retrying in ${findRunIdInterval / 1000}s...`);
+             findRunIdTimer = window.setTimeout(attemptToFindRunId, findRunIdInterval);
+           } else if (Date.now() - findRunIdStartTime <= findRunIdTimeoutDuration) {
+            findRunIdTimer = window.setTimeout(attemptToFindRunId, 1000); 
+           } else { 
+            if (findRunIdTimer !== null) window.clearInterval(findRunIdTimer);
+            console.error(`Final check failed or timeout race: Could not find a workflow run with job "${jobNameToFind}".`);
+            setDeploymentStatus('Could not locate the triggered workflow run. Please check workflow configuration.');
+            setIsPollingStatus(false);
+            setRedeployMode(true);
+           }
+        }
+      } catch (error) {
+        console.error('Error during attemptToFindRunId:', error);
+        setDeploymentStatus('Error while trying to find workflow run.');
+        if (findRunIdTimer !== null) window.clearInterval(findRunIdTimer);
+        setIsPollingStatus(false);
+        setRedeployMode(true);
+      }
+    };
+
+    const pollRunStatus = (runIdToPoll: number) => {
+      setDeploymentStatus(`Monitoring run ID: ${runIdToPoll}. Waiting for status updates...`);
+      const pollingTimeout = 3 * 60 * 1000; 
+      const pollIntervalTime = 10 * 1000; 
+      const statusPollStartTime = Date.now();
+      let statusPollTimer: number | null = null;
+
+      const performStatusPoll = async () => {
+        if (Date.now() - statusPollStartTime > pollingTimeout) {
+          if (statusPollTimer !== null) window.clearInterval(statusPollTimer);
+          setDeploymentStatus('Deployment timed out while waiting for "in_progress" status. Please try again.');
+          setIsDeployed(false);
+          setIsPollingStatus(false);
+          setRedeployMode(true);
+          return;
+        }
+
+        try {
+          const runStatusResponse = await fetch(`https://api.github.com/repos/${ORG}/${REPO}/actions/runs/${runIdToPoll}`, { headers: apiHeaders });
+          if (!runStatusResponse.ok) {
+            if (statusPollTimer !== null) window.clearInterval(statusPollTimer);
+            setDeploymentStatus('Failed to fetch deployment status. Please try again.');
+            setIsPollingStatus(false);
+            setIsDeployed(false);
+            setRedeployMode(true);
+            return;
+          }
+          const runDetails = await runStatusResponse.json();
+
+          if (runDetails.status === 'in_progress') {
+            if (statusPollTimer !== null) window.clearInterval(statusPollTimer);
+            setIsDeployed(true);
+            setRedeployMode(false);
+            
+            let progress = 0;
+            setDeploymentStatus(`Activation progress: ${progress}s / 30s`);
+            setIsPollingStatus(true); 
+
+            const newActivationTimerId = window.setInterval(() => {
+              progress += 1; 
+              setDeploymentStatus(`Activation progress: ${progress}s / 30s`);
+              if (progress >= 30) {
+                window.clearInterval(newActivationTimerId);
+                setActivationProgressTimerId(null);
+                setShowDeployPopup(false);
+                setIsPollingStatus(false); 
+                setDeploymentStatus('KickLock activated successfully!'); 
+              }
+            }, 1000);
+            setActivationProgressTimerId(newActivationTimerId);
+          } else {
+            setDeploymentStatus(`Workflow status: ${runDetails.status} (Conclusion: ${runDetails.conclusion || 'N/A'}). Waiting for 'in_progress' or timeout.`);
+            statusPollTimer = window.setTimeout(performStatusPoll, pollIntervalTime);
+          }
+        } catch (pollError) {
+          if (statusPollTimer !== null) window.clearInterval(statusPollTimer);
+          setDeploymentStatus('Error polling deployment status. Please try again.');
+          setIsDeployed(false);
+          setIsPollingStatus(false);
+          setRedeployMode(true);
+        }
+      };
+      statusPollTimer = window.setTimeout(performStatusPoll, 0); 
+    };
+    attemptToFindRunId();
+  };
+
+  const pollForCancelledStatus = async (runId: number) => { 
+    const pollTimeout = 60 * 1000; 
+    const pollInterval = 5 * 1000; 
+    const startTime = Date.now();
+    let timer: number | null = null;
+  
+    console.log(`Polling for cancellation of run ID: ${runId}`);
+    const check = async () => {
+      console.log(`pollForCancelledStatus: Checking run ${runId}...`);
+        if (Date.now() - startTime > pollTimeout) {
+          if (timer !== null) window.clearInterval(timer);
+          setDeploymentStatus('Timed out waiting for cancellation confirmation. You may need to redeploy.');
+          console.log(`pollForCancelledStatus: Timed out for run ${runId}.`);
+          setIsUndeploying(false);
+          setIsDeployed(false);
+          setRedeployMode(true);
+          setShowDeployPopup(true);
+          return;
+        }
+  
+      try {
+        const response = await fetch(`https://api.github.com/repos/${ORG}/${REPO}/actions/runs/${runId}`, { headers: apiHeaders });
+          if (!response.ok) {
+            if (timer !== null) window.clearInterval(timer);
+            setDeploymentStatus('Error fetching run status during undeploy. You may need to redeploy.');
+            console.error(`pollForCancelledStatus: Error fetching status for run ${runId}. Status: ${response.status}`);
+            setIsUndeploying(false);
+            setIsDeployed(false);
+            setRedeployMode(true);
+            setShowDeployPopup(true);
+            return;
+          }
+        const runDetails = await response.json();
+        console.log(`pollForCancelledStatus: Run ${runId} status: ${runDetails.status}, conclusion: ${runDetails.conclusion}`);
+  
+        if (runDetails.status === 'completed' && runDetails.conclusion === 'cancelled') {
+          if (timer !== null) window.clearInterval(timer);
+          setDeploymentStatus('Deployment successfully cancelled.');
+          setIsDeployed(false);
+          setIsUndeploying(false);
+          setShowDeployPopup(true); 
+          setRedeployMode(false); 
+          console.log(`pollForCancelledStatus: Run ${runId} successfully cancelled.`);
+        } else if (runDetails.status === 'completed') { // And not cancelled (implicitly, due to previous if)
+          if (timer !== null) window.clearInterval(timer);
+          setDeploymentStatus(`Undeploy failed: Workflow completed (${runDetails.conclusion}), not cancelled. You may need to redeploy.`);
+          console.log(`pollForCancelledStatus: Run ${runId} completed with ${runDetails.conclusion}, but was expected to be cancelled.`);
+          setIsUndeploying(false);
+          setIsDeployed(false); 
+          setRedeployMode(true);
+          setShowDeployPopup(true);
+        } else {
+          setDeploymentStatus(`Waiting for cancellation... Current status: ${runDetails.status}`);
+          timer = window.setTimeout(check, pollInterval);
+        }
+      } catch (error) {
+        if (timer !== null) window.clearInterval(timer);
+        setDeploymentStatus('Error checking cancellation status. You may need to redeploy.');
+        console.error(`pollForCancelledStatus: Error polling run ${runId}:`, error);
+        setIsUndeploying(false);
+        setIsDeployed(false);
+        setRedeployMode(true);
+        setShowDeployPopup(true);
+      }
+    };
+    timer = window.setTimeout(check, 0); 
   };
 
   const handleUndeploy = async () => {
     if (!username) {
-      alert('Username not found. Please log in again.');
+      alert('Username not found.');
       return;
     }
+    if (activationProgressTimerId !== null) {
+      window.clearInterval(activationProgressTimerId);
+      setActivationProgressTimerId(null);
+    }
 
-    setIsUndeploying(true);
-    
+    setButtonStates1(initialButtonStates);
+    setButtonStates2(initialButtonStates);
+    setButtonStates3(initialButtonStates);
+    setButtonStates4(initialButtonStates);
+    setButtonStates5(initialButtonStates);
+    setError1(''); setError2(''); setError3(''); setError4(''); setError5('');
+
+    setIsUndeploying(true); 
+    setShowDeployPopup(true); 
+    setDeploymentStatus('Attempting to cancel current deployment...');
+
+    if (!GITHUB_TOKEN) {
+      setDeploymentStatus('GitHub token not configured for undeploy.');
+      setIsUndeploying(false);
+      return;
+    }
+    const jobNameToFind = `Run for ${username}`; 
+    let runIdToCancel: number | null = null;
+
     try {
-      const response = await fetch('https://buddymaster77hugs-gradio1.hf.space/api/undeploy', {
+      console.log(`handleUndeploy: Looking for in-progress runs for job "${jobNameToFind}"`);
+      const runsResponse = await fetch(`https://api.github.com/repos/${ORG}/${REPO}/actions/workflows/${WORKFLOW_FILE_NAME}/runs?status=in_progress`, { headers: apiHeaders });
+      if (!runsResponse.ok) {
+        console.error(`handleUndeploy: Failed to fetch in-progress runs. Status: ${runsResponse.status}`);
+        throw new Error('Failed to fetch in-progress runs for undeploy.');
+      }
+      
+      const runsData = await runsResponse.json();
+      const sortedRuns = runsData.workflow_runs.sort((a: any, b: any) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+      console.log(`handleUndeploy: Found ${sortedRuns.length} in-progress runs.`);
+
+      for (const run of sortedRuns) {
+        console.log(`handleUndeploy: Checking run ID ${run.id}`);
+        const jobsResponse = await fetch(run.jobs_url, { headers: apiHeaders });
+        if (jobsResponse.ok) {
+          const jobsData = await jobsResponse.json();
+          if (jobsData.jobs && jobsData.jobs.find((job: any) => job.name === jobNameToFind)) {
+            console.log(`handleUndeploy: Found matching run ID ${run.id} to cancel.`);
+            runIdToCancel = run.id;
+            break;
+          }
+        } else {
+          console.warn(`handleUndeploy: Failed to fetch jobs for run ${run.id}. Status: ${jobsResponse.status}`);
+        }
+      }
+
+      if (!runIdToCancel) {
+        setDeploymentStatus('No active deployment found for your user to cancel.');
+        console.log('handleUndeploy: No active run found to cancel.');
+        setIsUndeploying(false);
+        setIsDeployed(false);
+        setRedeployMode(false); 
+        setShowDeployPopup(true); 
+        return;
+      }
+
+      console.log(`handleUndeploy: Attempting to cancel run ID ${runIdToCancel}`);
+      const cancelResponse = await fetch(`https://api.github.com/repos/${ORG}/${REPO}/actions/runs/${runIdToCancel}/cancel`, {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({
-          modal_name: username
-        })
+        headers: apiHeaders
       });
 
-      if (response.ok) {
-        setIsDeployed(false);
-        setShowThankYouMessage(true);
+      if (cancelResponse.status === 202) { 
+        setDeploymentStatus(`Cancellation request sent for run ${runIdToCancel}. Monitoring...`);
+        console.log(`handleUndeploy: Cancellation request for ${runIdToCancel} accepted (202). Starting poll.`);
+        pollForCancelledStatus(runIdToCancel); 
       } else {
-        const errorData = await response.json();
-        alert(`Undeployment failed: ${errorData.message || 'Unknown error'}`);
+        const errorData = await cancelResponse.json().catch(() => ({}));
+        console.error(`handleUndeploy: Failed to cancel workflow run ${runIdToCancel}. Status: ${cancelResponse.status}`, errorData);
+        throw new Error(`Failed to cancel workflow run ${runIdToCancel}: ${cancelResponse.status} ${errorData.message || 'Unknown error'}`);
       }
-    } catch (error) {
-      alert(`Undeployment error: ${error instanceof Error ? error.message : 'Unknown error'}`);
-    } finally {
+    } catch (error: any) {
+      console.error('handleUndeploy: Error caught:', error);
+      setDeploymentStatus(`Error during undeploy: ${error.message}. You may need to redeploy.`);
       setIsUndeploying(false);
+      setIsDeployed(false);
+      setRedeployMode(true);
+      setShowDeployPopup(true);
     }
   };
 
   const handleDeploy = async () => {
-    if (!username) {
+    if (!username) { 
       alert('Username not found. Please log in again.');
       return;
     }
-
-    setIsDeploying(true);
+    if (activationProgressTimerId !== null) {
+      window.clearInterval(activationProgressTimerId);
+      setActivationProgressTimerId(null);
+    }
+    setIsDeploying(true); 
+    setRedeployMode(false); 
+    setShowDeployPopup(true); 
+    setDeploymentStatus('Dispatching workflow...'); 
     
+    if (!GITHUB_TOKEN) {
+      setDeploymentStatus('Deployment failed: GitHub token not configured.');
+      setIsDeploying(false);
+      setRedeployMode(true);
+      return;
+    }
     try {
-      const response = await fetch('https://buddymaster77hugs-gradio1.hf.space/api/deploy', {
+      const response = await fetch(`https://api.github.com/repos/${ORG}/${REPO}/actions/workflows/${WORKFLOW_FILE_NAME}/dispatches`, {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({
-          repo_url: 'https://github.com/octocat/Hello-World.git',
-          modal_name: username
-        })
+        headers: { ...apiHeaders, 'Content-Type': 'application/json'},
+        body: JSON.stringify({ ref: 'main', inputs: { username: username } })
       });
+      setIsDeploying(false); 
+      if (response.status === 204) {
+        setDeploymentStatus('Workflow dispatched. Waiting 10s for GitHub to initialize run...');
+        setIsPollingStatus(true); 
+        setShowDeployPopup(true); 
 
-      if (response.ok) {
-        setDeploymentStatus('Successfully deployed');
-        setIsDeployed(true);
-        setTimeout(() => {
-          setShowDeployPopup(false);
-        }, 2000);
+        window.setTimeout(() => {
+          startDeploymentCheck(username); 
+        }, 10000); 
       } else {
-        const errorData = await response.json();
-        setDeploymentStatus(`Deployment failed: ${errorData.message || 'Unknown error'}`);
+        const errorData = await response.json().catch(() => ({ message: 'Unknown error during dispatch' }));
+        setDeploymentStatus(`Dispatch failed: ${response.status} ${errorData.message || ''}`);
+        setIsDeployed(false); 
+        setIsPollingStatus(false); 
+        setRedeployMode(true); 
       }
     } catch (error) {
-      setDeploymentStatus(`Deployment error: ${error instanceof Error ? error.message : 'Unknown error'}`);
-    } finally {
-      setIsDeploying(false);
+      setIsDeploying(false); 
+      setDeploymentStatus(`Dispatch error: ${error instanceof Error ? error.message : 'Unknown error'}`);
+      setIsDeployed(false); 
+      setIsPollingStatus(false); 
+      setRedeployMode(true); 
     }
   };
   
-  const [formData1, setFormData1] = useState<FormData>({
-    RC: '',
-    startAttackTime: '',
-    stopAttackTime: '',
-    attackIntervalTime: '',
-    startDefenceTime: '',
-    stopDefenceTime: '',
-    defenceIntervalTime: '',
-    PlanetName: '',
-    Rival: ''
-  });
+  const [formData1, setFormData1] = useState<FormData>({ RC: '', startAttackTime: '', stopAttackTime: '', attackIntervalTime: '', startDefenceTime: '', stopDefenceTime: '', defenceIntervalTime: '', PlanetName: '', Rival: '' });
+  const [formData2, setFormData2] = useState<FormData>({ RC: '', startAttackTime: '', stopAttackTime: '', attackIntervalTime: '', startDefenceTime: '', stopDefenceTime: '', defenceIntervalTime: '', PlanetName: '', Rival: '' });
+  const [formData3, setFormData3] = useState<FormData>({ RC: '', startAttackTime: '', stopAttackTime: '', attackIntervalTime: '', startDefenceTime: '', stopDefenceTime: '', defenceIntervalTime: '', PlanetName: '', Rival: '' });
+  const [formData4, setFormData4] = useState<FormData>({ RC: '', startAttackTime: '', stopAttackTime: '', attackIntervalTime: '', startDefenceTime: '', stopDefenceTime: '', defenceIntervalTime: '', PlanetName: '', Rival: '' });
+  const [formData5, setFormData5] = useState<FormData>({ RC: '', startAttackTime: '', stopAttackTime: '', attackIntervalTime: '', startDefenceTime: '', stopDefenceTime: '', defenceIntervalTime: '', PlanetName: '', Rival: '' });
   
-  const [formData2, setFormData2] = useState<FormData>({
-    RC: '',
-    startAttackTime: '',
-    stopAttackTime: '',
-    attackIntervalTime: '',
-    startDefenceTime: '',
-    stopDefenceTime: '',
-    defenceIntervalTime: '',
-    PlanetName: '',
-    Rival: ''
-  });
-  
-  const [formData3, setFormData3] = useState<FormData>({
-    RC: '',
-    startAttackTime: '',
-    stopAttackTime: '',
-    attackIntervalTime: '',
-    startDefenceTime: '',
-    stopDefenceTime: '',
-    defenceIntervalTime: '',
-    PlanetName: '',
-    Rival: ''
-  });
-  
-  const [formData4, setFormData4] = useState<FormData>({
-    RC: '',
-    startAttackTime: '',
-    stopAttackTime: '',
-    attackIntervalTime: '',
-    startDefenceTime: '',
-    stopDefenceTime: '',
-    defenceIntervalTime: '',
-    PlanetName: '',
-    Rival: ''
-  });
-  
-  const [formData5, setFormData5] = useState<FormData>({
-    RC: '',
-    startAttackTime: '',
-    stopAttackTime: '',
-    attackIntervalTime: '',
-    startDefenceTime: '',
-    stopDefenceTime: '',
-    defenceIntervalTime: '',
-    PlanetName: '',
-    Rival: ''
-  });
-  
-  const [buttonStates1, setButtonStates1] = useState<ButtonStates>({
-    start: { loading: false, active: false, text: 'Start' },
-    stop: { loading: false, active: false, text: 'Stop' },
-    update: { loading: false, active: false, text: 'Update' }
-  });
-  
-  const [buttonStates2, setButtonStates2] = useState<ButtonStates>({
-    start: { loading: false, active: false, text: 'Start' },
-    stop: { loading: false, active: false, text: 'Stop' },
-    update: { loading: false, active: false, text: 'Update' }
-  });
-  
-  const [buttonStates3, setButtonStates3] = useState<ButtonStates>({
-    start: { loading: false, active: false, text: 'Start' },
-    stop: { loading: false, active: false, text: 'Stop' },
-    update: { loading: false, active: false, text: 'Update' }
-  });
-  
-  const [buttonStates4, setButtonStates4] = useState<ButtonStates>({
-    start: { loading: false, active: false, text: 'Start' },
-    stop: { loading: false, active: false, text: 'Stop' },
-    update: { loading: false, active: false, text: 'Update' }
-  });
-  
-  const [buttonStates5, setButtonStates5] = useState<ButtonStates>({
-    start: { loading: false, active: false, text: 'Start' },
-    stop: { loading: false, active: false, text: 'Stop' },
-    update: { loading: false, active: false, text: 'Update' }
-  });
+  const [buttonStates1, setButtonStates1] = useState<ButtonStates>(initialButtonStates);
+  const [buttonStates2, setButtonStates2] = useState<ButtonStates>(initialButtonStates);
+  const [buttonStates3, setButtonStates3] = useState<ButtonStates>(initialButtonStates);
+  const [buttonStates4, setButtonStates4] = useState<ButtonStates>(initialButtonStates);
+  const [buttonStates5, setButtonStates5] = useState<ButtonStates>(initialButtonStates);
   
   const [error1, setError1] = useState('');
   const [error2, setError2] = useState('');
@@ -294,43 +555,22 @@ const GalaxyForm: React.FC = () => {
   const handleInputChange = (formNumber: number) => (e: React.ChangeEvent<HTMLInputElement>) => {
     const { name, value } = e.target;
     const timeFields = ['startAttackTime', 'stopAttackTime', 'attackIntervalTime', 'startDefenceTime', 'stopDefenceTime', 'defenceIntervalTime'];
-    
     if (timeFields.includes(name)) {
       const numericValue = value.replace(/\D/g, '').slice(0, 5);
       switch(formNumber) {
-        case 1:
-          setFormData1(prevState => ({ ...prevState, [name]: numericValue }));
-          break;
-        case 2:
-          setFormData2(prevState => ({ ...prevState, [name]: numericValue }));
-          break;
-        case 3:
-          setFormData3(prevState => ({ ...prevState, [name]: numericValue }));
-          break;
-        case 4:
-          setFormData4(prevState => ({ ...prevState, [name]: numericValue }));
-          break;
-        case 5:
-          setFormData5(prevState => ({ ...prevState, [name]: numericValue }));
-          break;
+        case 1: setFormData1(prevState => ({ ...prevState, [name]: numericValue })); break;
+        case 2: setFormData2(prevState => ({ ...prevState, [name]: numericValue })); break;
+        case 3: setFormData3(prevState => ({ ...prevState, [name]: numericValue })); break;
+        case 4: setFormData4(prevState => ({ ...prevState, [name]: numericValue })); break;
+        case 5: setFormData5(prevState => ({ ...prevState, [name]: numericValue })); break;
       }
     } else {
       switch(formNumber) {
-        case 1:
-          setFormData1(prevState => ({ ...prevState, [name]: value }));
-          break;
-        case 2:
-          setFormData2(prevState => ({ ...prevState, [name]: value }));
-          break;
-        case 3:
-          setFormData3(prevState => ({ ...prevState, [name]: value }));
-          break;
-        case 4:
-          setFormData4(prevState => ({ ...prevState, [name]: value }));
-          break;
-        case 5:
-          setFormData5(prevState => ({ ...prevState, [name]: value }));
-          break;
+        case 1: setFormData1(prevState => ({ ...prevState, [name]: value })); break;
+        case 2: setFormData2(prevState => ({ ...prevState, [name]: value })); break;
+        case 3: setFormData3(prevState => ({ ...prevState, [name]: value })); break;
+        case 4: setFormData4(prevState => ({ ...prevState, [name]: value })); break;
+        case 5: setFormData5(prevState => ({ ...prevState, [name]: value })); break;
       }
     }
   };
@@ -338,131 +578,63 @@ const GalaxyForm: React.FC = () => {
   const handleAction = (formNumber: number) => async (action: ActionType) => {
     const setButtonStates = (() => {
       switch(formNumber) {
-        case 1: return setButtonStates1;
-        case 2: return setButtonStates2;
-        case 3: return setButtonStates3;
-        case 4: return setButtonStates4;
-        case 5: return setButtonStates5;
-        default: return setButtonStates1;
+        case 1: return setButtonStates1; case 2: return setButtonStates2; case 3: return setButtonStates3;
+        case 4: return setButtonStates4; case 5: return setButtonStates5; default: return setButtonStates1;
       }
     })();
-  
     const setError = (() => {
       switch(formNumber) {
-        case 1: return setError1;
-        case 2: return setError2;
-        case 3: return setError3;
-        case 4: return setError4;
-        case 5: return setError5;
-        default: return setError1;
+        case 1: return setError1; case 2: return setError2; case 3: return setError3;
+        case 4: return setError4; case 5: return setError5; default: return setError1;
       }
     })();
-  
     const formData = (() => {
       switch(formNumber) {
-        case 1: return formData1;
-        case 2: return formData2;
-        case 3: return formData3;
-        case 4: return formData4;
-        case 5: return formData5;
-        default: return formData1;
+        case 1: return formData1; case 2: return formData2; case 3: return formData3;
+        case 4: return formData4; case 5: return formData5; default: return formData1;
       }
     })();
-  
-    setButtonStates(prev => ({
-      ...prev,
-      [action]: { ...prev[action], loading: true }
-    }));
+    setButtonStates(prev => ({ ...prev, [action]: { ...prev[action], loading: true } }));
     setError('');
-  
     try {
       const modifiedFormData = Object.entries(formData).reduce((acc, [key, value]) => {
-        acc[`${key}${formNumber}`] = value;
-        return acc;
+        acc[`${key}${formNumber}`] = value; return acc;
       }, {} as Record<string, string>);
-  
-      const response = await fetch(`https://bharani77--${username}-web-app.modal.run/${action}/${formNumber}`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json'
-        },
+      const response = await fetch(`https://${username}.loca.lt/${action}/${formNumber}`, {
+        method: 'POST', 
+        headers: { 
+          'Content-Type': 'application/json',
+          'bypass-tunnel-reminder': 'true' 
+        }, 
         body: JSON.stringify(modifiedFormData)
       });
-      
       if (response.ok) {
-        setButtonStates(prev => ({
-          ...prev,
-          [action]: { 
-            loading: false, 
-            active: true, 
-            text: action === 'start' ? 'Running' : action === 'stop' ? 'Stopped' : 'Updated',
-          },
-          ...(action === 'start' ? { 
-            stop: { ...prev.stop, active: false, text: 'Stop' },
-          } : {}),
-          ...(action === 'stop' ? { 
-            start: { ...prev.start, active: false, text: 'Start' },
-          } : {}),
-          ...(action === 'update' ? {
-            update: { loading: false, active: true, text: 'Updated' }
-          } : {})
+        setButtonStates(prev => ({ ...prev, [action]: { loading: false, active: true, text: action === 'start' ? 'Running' : action === 'stop' ? 'Stopped' : 'Updated', },
+          ...(action === 'start' ? { stop: { ...prev.stop, active: false, text: 'Stop' }, } : {}),
+          ...(action === 'stop' ? { start: { ...prev.start, active: false, text: 'Start' }, } : {}),
+          ...(action === 'update' ? { update: { loading: false, active: true, text: 'Updated' } } : {})
         }));
-        setError(''); // Clear any existing errors
+        setError(''); 
       } else {
-        // Simplified error message
-        if (action === 'start') {
-          setError('Unable to start - Please try again');
-        } else {
-          setError(`Unable to ${action} - Please try again`);
-        }
-        setButtonStates(prev => ({
-          ...prev,
-          [action]: { ...prev[action], loading: false, active: false, text: action }
-        }));
+        if (action === 'start') { setError('Unable to start - Please try again'); } else { setError(`Unable to ${action} - Please try again`); }
+        setButtonStates(prev => ({ ...prev, [action]: { ...prev[action], loading: false, active: false, text: action } }));
       }
     } catch (error) {
       setError(`Unable to ${action} - Please try again`);
-      setButtonStates(prev => ({
-        ...prev,
-        [action]: { ...prev[action], loading: false, active: false, text: action }
-      }));
+      setButtonStates(prev => ({ ...prev, [action]: { ...prev[action], loading: false, active: false, text: action } }));
     }
   };
   
   const renderForm = (formNumber: number) => {
     const formData = (() => {
-      switch(formNumber) {
-        case 1: return formData1;
-        case 2: return formData2;
-        case 3: return formData3;
-        case 4: return formData4;
-        case 5: return formData5;
-        default: return formData1;
-      }
+      switch(formNumber) { case 1: return formData1; case 2: return formData2; case 3: return formData3; case 4: return formData4; case 5: return formData5; default: return formData1;}
     })();
-  
     const buttonStates = (() => {
-      switch(formNumber) {
-        case 1: return buttonStates1;
-        case 2: return buttonStates2;
-        case 3: return buttonStates3;
-        case 4: return buttonStates4;
-        case 5: return buttonStates5;
-        default: return buttonStates1;
-      }
+      switch(formNumber) { case 1: return buttonStates1; case 2: return buttonStates2; case 3: return buttonStates3; case 4: return buttonStates4; case 5: return buttonStates5; default: return buttonStates1; }
     })();
-  
     const error = (() => {
-      switch(formNumber) {
-        case 1: return error1;
-        case 2: return error2;
-        case 3: return error3;
-        case 4: return error4;
-        case 5: return error5;
-        default: return error1;
-      }
+      switch(formNumber) { case 1: return error1; case 2: return error2; case 3: return error3; case 4: return error4; case 5: return error5; default: return error1; }
     })();
-  
     const inputFields = [
       { key: 'RC', label: 'RC', color: '#FFFF00', type: 'text', maxLength: undefined, className: styles.input },
       { key: 'PlanetName', label: 'Planet Name', color: '#FFFFFF', type: 'text', maxLength: undefined, className: styles.input },
@@ -474,7 +646,6 @@ const GalaxyForm: React.FC = () => {
       { key: 'defenceIntervalTime', label: 'Defence Interval Time', color: '#FFFFFF', type: 'text', maxLength: 5, className: `${styles.input} ${styles.timeInput}` },
       { key: 'stopDefenceTime', label: 'Stop Defence Time', color: '#00FFFF', type: 'text', maxLength: 5, className: `${styles.input} ${styles.timeInput}` },
     ];
-  
     return (
       <div className={styles.formContent} style={{ display: activeTab === formNumber ? 'block' : 'none' }}>
         {error && <div className="text-red-500 mb-4">{error}</div>}
@@ -482,68 +653,13 @@ const GalaxyForm: React.FC = () => {
           {inputFields.map(({ key, label, color, type, maxLength, className }) => (
             <div key={key} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
               <label style={{ color: color, marginBottom: '0.5rem', textAlign: 'center' }}>{label}</label>
-              <input
-                type={type}
-                name={key}
-                value={formData[key as keyof FormData]}
-                onChange={handleInputChange(formNumber)}
-                className={className}
-                maxLength={maxLength}
-                autoComplete="off"
-                onFocus={(e) => e.target.setAttribute('autocomplete', 'off')}
-                style={{
-                  backgroundColor: 'rgba(25, 0, 0, 0.7)',
-                  border: '1px solid rgba(255, 0, 0, 0.3)',
-                  color: '#fff',
-                  WebkitTextFillColor: '#fff',
-                  width: '100%',
-                  padding: '0.5rem',
-                  boxSizing: 'border-box'
-                }}
-              />
+              <input type={type} name={key} value={formData[key as keyof FormData]} onChange={handleInputChange(formNumber)} className={className} maxLength={maxLength} autoComplete="off" onFocus={(e) => e.target.setAttribute('autocomplete', 'off')} style={{ backgroundColor: 'rgba(25, 0, 0, 0.7)', border: '1px solid rgba(255, 0, 0, 0.3)', color: '#fff', WebkitTextFillColor: '#fff', width: '100%', padding: '0.5rem', boxSizing: 'border-box' }} />
             </div>
           ))}
-          
           <div className={styles.buttonGroup} style={{ gap: '20px', display: 'flex', justifyContent: 'center', marginTop: '1rem' }}>
-            <button
-              type="button"
-              onClick={() => handleAction(formNumber)('start')}
-              className={`${styles.button} ${buttonStates.start.loading ? styles.loadingButton : ''} 
-                ${buttonStates.start.active ? styles.buttonRunning : ''}`}
-              disabled={buttonStates.start.loading}
-              style={{ 
-                backgroundColor: buttonStates.start.active ? '#22c55e' : undefined
-              }}
-            >
-              <Play size={16} />
-              <span>Start</span>
-            </button>
-  
-            <button
-              type="button"
-              onClick={() => handleAction(formNumber)('stop')}
-              className={`${styles.button} ${buttonStates.stop.loading ? styles.loadingButton : ''} 
-                ${buttonStates.stop.active ? styles.buttonStopped : ''}`}
-              disabled={buttonStates.stop.loading}
-            >
-              <Square size={16} />
-              <span>Stop</span>
-            </button>
-  
-            <button
-              type="button"
-              onClick={() => handleAction(formNumber)('update')}
-              className={`${styles.button} ${buttonStates.update.loading ? styles.loadingButton : ''} 
-                ${buttonStates.update.active ? styles.buttonUpdated : ''}`}
-              disabled={buttonStates.update.loading}
-              style={{ 
-                backgroundColor: buttonStates.update.active ? '#3b82f6' : undefined
-              }}
-            >
-              <RefreshCw size={16} />
-              <span>Update</span>
-            </button>
-
+            <button type="button" onClick={() => handleAction(formNumber)('start')} className={`${styles.button} ${buttonStates.start.loading ? styles.loadingButton : ''} ${buttonStates.start.active ? styles.buttonRunning : ''}`} disabled={buttonStates.start.loading} style={{ backgroundColor: buttonStates.start.active ? '#22c55e' : undefined }} > <Play size={16} /> <span>Start</span> </button>
+            <button type="button" onClick={() => handleAction(formNumber)('stop')} className={`${styles.button} ${buttonStates.stop.loading ? styles.loadingButton : ''} ${buttonStates.stop.active ? styles.buttonStopped : ''}`} disabled={buttonStates.stop.loading} > <Square size={16} /> <span>Stop</span> </button>
+            <button type="button" onClick={() => handleAction(formNumber)('update')} className={`${styles.button} ${buttonStates.update.loading ? styles.loadingButton : ''} ${buttonStates.update.active ? styles.buttonUpdated : ''}`} disabled={buttonStates.update.loading} style={{ backgroundColor: buttonStates.update.active ? '#3b82f6' : undefined }} > <RefreshCw size={16} /> <span>Update</span> </button>
             {renderStatusButton()}
           </div>
         </div>
@@ -552,220 +668,45 @@ const GalaxyForm: React.FC = () => {
   };
   
   const renderStatusButton = () => {
-    if (isCheckingStatus) {
-      return (
-        <button
-          className={`${styles.button}`}
-          disabled={true}
-          style={{ 
-            minWidth: '120px',
-            backgroundColor: '#666'
-          }}
-        >
-          <RefreshCw size={16} />
-          <span>Checking...</span>
-        </button>
-      );
-    } else if (isDeployed) {
-      return (
-        <button
-          onClick={handleUndeploy}
-          disabled={isUndeploying}
-          className={`${styles.button}`}
-          style={{ 
-            minWidth: '120px',
-            backgroundColor: '#22c55e',
-            border: 'none'
-          }}
-        >
-          {isUndeploying ? (
-            <>
-              <RefreshCw size={16} />
-              <span>Undeploying...</span>
-            </>
-          ) : (
-            <>
-              <CheckCircle size={16} />
-              <span>Deployed</span>
-            </>
-          )}
-        </button>
-      );
+    if (isDeployed) {
+      return ( <button onClick={handleUndeploy} disabled={isUndeploying} className={`${styles.button}`} style={{ minWidth: '120px', backgroundColor: '#22c55e', border: 'none' }} > {isUndeploying ? ( <> <RefreshCw size={16} /> <span>Undeploying...</span> </> ) : ( <> <CheckCircle size={16} /> <span>Deployed</span> </> )} </button> );
     } else {
-      return (
-        <button
-          onClick={() => setShowDeployPopup(true)}
-          className={`${styles.button}`}
-          style={{ 
-            minWidth: '120px',
-            backgroundColor: '#dc2626',
-            border: 'none'
-          }}
-        >
-          <RefreshCw size={16} />
-          <span>Deploy</span>
-        </button>
-      );
+      return ( <button onClick={() => setShowDeployPopup(true)} className={`${styles.button}`} style={{ minWidth: '120px', backgroundColor: '#dc2626', border: 'none' }} > <RefreshCw size={16} /> <span>Deploy</span> </button> );
     }
   };
   
   return (
     <div className={styles.container}>
-      <div className={styles.header} style={{
-        display: 'flex',
-        alignItems: 'flex-start',
-        justifyContent: 'space-between',
-        padding: '0px',
-        backgroundColor: '#1a1a1a',
-        borderRadius: '0px',
-        margin: '0 0 20px 0',
-        position: 'relative'
-      }}>
-        {username && (
-          <div style={{
-            color: '#fff',
-            fontWeight: 'bold', 
-            fontSize: '1.1rem',
-            position: 'absolute',
-            left: '-625px',
-            top: '-15px',
-            display: 'flex',
-            alignItems: 'center'
-          }}>
-            <span style={{ marginRight: '4px' }}>Welcome:</span>
-            <span>{username}</span>
-          </div>
-        )}
-
-        <div style={{ marginLeft: 'auto' }}>
-          <button
-            onClick={handleLogout}
-            className={`${styles.button} ${styles.logoutButton}`}
-          >
-            <LogOut size={16} />
-            <span>Logout</span>
-          </button>
-        </div>
+      <div className={styles.header} style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', padding: '0px', backgroundColor: '#1a1a1a', borderRadius: '0px', margin: '0 0 20px 0', position: 'relative' }}>
+        {displayedUsername && ( <div style={{ color: '#fff', fontWeight: 'bold', fontSize: '1.1rem', position: 'absolute', left: '-625px', top: '-15px', display: 'flex', alignItems: 'center' }}> <span style={{ marginRight: '4px' }}>Welcome:</span> <span>{displayedUsername}</span> </div> )}
+        <div style={{ marginLeft: 'auto' }}> <button onClick={handleLogout} className={`${styles.button} ${styles.logoutButton}`} > <LogOut size={16} /> <span>Logout</span> </button> </div>
       </div>
-
-      <h1 className={styles.title}>
-        <span className={styles.kickLock}>KICK ~ LOCK</span>
-      </h1>
-      
+      <h1 className={styles.title}> <span className={styles.kickLock}>KICK ~ LOCK</span> </h1>
       <div className={styles.formContainer}>
         <div className={styles.tabsContainer}>
-          {[1, 2, 3, 4, 5].map(num => (
-            <button
-              key={num}
-              className={`${styles.tabButton} ${activeTab === num ? styles.activeTab : ''}`}
-              onClick={() => setActiveTab(num)}
-            >
-              {formNames[num as keyof typeof formNames]}
-            </button>
-          ))}
+          {[1, 2, 3, 4, 5].map(num => ( <button key={num} className={`${styles.tabButton} ${activeTab === num ? styles.activeTab : ''}`} onClick={() => setActiveTab(num)} > {formNames[num as keyof typeof formNames]} </button> ))}
         </div>
-        
-        {renderForm(1)}
-        {renderForm(2)}
-        {renderForm(3)}
-        {renderForm(4)}
-        {renderForm(5)}
+        {renderForm(1)} {renderForm(2)} {renderForm(3)} {renderForm(4)} {renderForm(5)}
       </div>
-
-      {/* Deploy Popup */}
       {showDeployPopup && (
-        <div style={{
-          position: 'fixed',
-          top: 0,
-          left: 0,
-          width: '100%',
-          height: '100%',
-          backgroundColor: 'rgba(0, 0, 0, 0.7)',
-          display: 'flex',
-          justifyContent: 'center',
-          alignItems: 'center',
-          zIndex: 1000
-        }}>
-          <div style={{
-            backgroundColor: '#1a1a1a',
-            borderRadius: '8px',
-            padding: '20px',
-            width: '300px',
-            boxShadow: '0 4px 20px rgba(0, 0, 0, 0.5)',
-            border: '1px solid #333'
-          }}>
-            <h2 style={{ color: '#fff', marginBottom: '20px', textAlign: 'center' }}>Deploy KickLock</h2>
-            <p style={{ color: '#aaa', marginBottom: '20px', textAlign: 'center', fontSize: '0.9rem' }}>
-              Deployment is required to use KickLock features
-            </p>
-            
+        <div style={{ position: 'fixed', top: 0, left: 0, width: '100%', height: '100%', backgroundColor: 'rgba(0, 0, 0, 0.7)', display: 'flex', justifyContent: 'center', alignItems: 'center', zIndex: 1000 }}>
+          <div style={{ backgroundColor: '#1a1a1a', borderRadius: '8px', padding: '20px', width: '350px', boxShadow: '0 4px 20px rgba(0, 0, 0, 0.5)', border: '1px solid #333', textAlign: 'center' }}>
+            <h2 style={{ color: '#fff', marginBottom: '15px' }}> {isDeployed ? 'KickLock Active' : 'Deploy KickLock'} </h2>
+            <p style={{ color: '#aaa', marginBottom: '20px', fontSize: '0.9rem', minHeight: '40px' }}> {deploymentStatus} </p>
             <div style={{ display: 'flex', justifyContent: 'center' }}>
-              <button
-                onClick={handleDeploy}
-                disabled={isDeploying || isDeployed}
-                style={{
-                  padding: '10px 20px',
-                  borderRadius: '4px',
-                  border: 'none',
-                  backgroundColor: isDeployed ? '#22c55e' : '#d32f2f',
-                  color: 'white',
-                  fontWeight: 'bold',
-                  cursor: isDeploying || isDeployed ? 'not-allowed' : 'pointer',
-                  opacity: isDeploying ? 0.7 : 1,
-                  transition: 'all 0.3s ease',
-                  width: '100%'
-                }}
-              >
-                {isDeploying ? 'Deploying...' : isDeployed ? 'Deployed' : 'Deploy KickLock'}
-              </button>
+              {!isDeployed || redeployMode ? ( <button onClick={handleDeploy} disabled={isDeploying || isPollingStatus} style={{ padding: '10px 20px', borderRadius: '4px', border: 'none', backgroundColor: (isDeploying || isPollingStatus) ? '#555' : (redeployMode ? '#e67e22' : '#d32f2f'), color: 'white', fontWeight: 'bold', cursor: (isDeploying || isPollingStatus) ? 'not-allowed' : 'pointer', opacity: (isDeploying || isPollingStatus) ? 0.7 : 1, transition: 'all 0.3s ease', width: '100%' }} > {isDeploying ? 'Dispatching...' : isPollingStatus ? 'Checking Status...' : (redeployMode ? 'Redeploy Again' : 'Deploy KickLock')} </button>
+              ) : ( <p style={{color: '#22c55e'}}>Deployment is active!</p> )}
             </div>
+            {(!isPollingStatus && !isDeploying && !isDeployed && !redeployMode) && ( <button onClick={() => setShowDeployPopup(false)} style={{marginTop: '15px', background: 'none', border: '1px solid #555', color: '#aaa', padding: '5px 10px', borderRadius: '4px'}}> Close </button> )}
           </div>
         </div>
       )}
-      
-      {/* Thank You Message */}
       {showThankYouMessage && (
-        <div style={{
-          position: 'fixed',
-          top: 0,
-          left: 0,
-          width: '100%',
-          height: '100%',
-          backgroundColor: 'rgba(0, 0, 0, 0.7)',
-          display: 'flex',
-          justifyContent: 'center',
-          alignItems: 'center',
-          zIndex: 1000
-        }}>
-          <div style={{
-            backgroundColor: '#1a1a1a',
-            borderRadius: '8px',
-            padding: '20px',
-            width: '300px',
-            boxShadow: '0 4px 20px rgba(0, 0, 0, 0.5)',
-            border: '1px solid #333'
-          }}>
+        <div style={{ position: 'fixed', top: 0, left: 0, width: '100%', height: '100%', backgroundColor: 'rgba(0, 0, 0, 0.7)', display: 'flex', justifyContent: 'center', alignItems: 'center', zIndex: 1000 }}>
+          <div style={{ backgroundColor: '#1a1a1a', borderRadius: '8px', padding: '20px', width: '300px', boxShadow: '0 4px 20px rgba(0, 0, 0, 0.5)', border: '1px solid #333' }}>
             <h2 style={{ color: '#fff', marginBottom: '20px', textAlign: 'center' }}>Thank You for using KickLock</h2>
-            
             <div style={{ display: 'flex', justifyContent: 'center' }}>
-              <button
-                onClick={async () => {
-                  setShowThankYouMessage(false);
-                  await handleDeploy();
-                }}
-                style={{
-                  padding: '10px 20px',
-                  borderRadius: '4px',
-                  border: 'none',
-                  backgroundColor: '#d32f2f',
-                  color: 'white',
-                  fontWeight: 'bold',
-                  cursor: 'pointer',
-                  width: '100%'
-                }}
-              >
-                Deploy Again
-              </button>
+              <button onClick={async () => { setShowThankYouMessage(false); await handleDeploy(); }} style={{ padding: '10px 20px', borderRadius: '4px', border: 'none', backgroundColor: '#d32f2f', color: 'white', fontWeight: 'bold', cursor: 'pointer', width: '100%' }} > Deploy Again </button>
             </div>
           </div>
         </div>
