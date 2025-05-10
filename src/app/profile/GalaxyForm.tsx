@@ -122,9 +122,10 @@ const getApiAuthHeaders = (): Record<string, string> => {
           return;
         }
         const sortedRuns = workflowRuns.sort((a: any, b: any) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+        console.log("Sorted runs (checkInitialDeploymentStatus):", sortedRuns.slice(0, 3).map((run: any) => ({ id: run.id, created_at: run.created_at })));
   
         for (const run of sortedRuns) {
-          const jobsResponse = await fetch(`/git/galaxyapi/runs?jobsForRunId=${run.id}`, { headers: authHeaders });
+         const jobsResponse = await fetch(`/git/galaxyapi/runs?jobsForRunId=${run.id}`, { headers: authHeaders });
           if (jobsResponse.ok) {
             const jobsData = await jobsResponse.json();
             if (jobsData.jobs && jobsData.jobs.find((job: any) => job.name === jobNameToFind)) {
@@ -246,10 +247,11 @@ const getApiAuthHeaders = (): Record<string, string> => {
           throw new Error('Invalid runs data from backend.');
         }
         const sortedRuns = workflowRuns.sort((a: any, b: any) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+        console.log("Sorted runs (startDeploymentCheck):", sortedRuns.slice(0, 3).map((run: any) => ({ id: run.id, created_at: run.created_at })));
         console.log(`Fetched ${sortedRuns.length} runs in current attempt from backend.`);
-
+  
         for (const run of sortedRuns) {
-          console.log(`Checking run ID: ${run.id}, Created: ${run.created_at}, Status: ${run.status}, URL: ${run.html_url}`);
+         console.log(`Checking run ID: ${run.id}, Created: ${run.created_at}, Status: ${run.status}, URL: ${run.html_url}`);
           const jobsResponse = await fetch(`/git/galaxyapi/runs?jobsForRunId=${run.id}`, { headers: authHeaders });
           if (jobsResponse.ok) {
             const jobsData = await jobsResponse.json();
