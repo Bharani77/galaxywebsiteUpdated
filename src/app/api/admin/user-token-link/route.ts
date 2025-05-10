@@ -44,7 +44,7 @@ export async function DELETE(request: NextRequest) {
     // Assuming 'token' is the column in 'users' table that might store this token value.
     // If the 'users.token' column is meant for something else (e.g. signup token), adjust this logic.
     // The client code was doing this, so replicating the intent.
-    const { error: userUpdateError } = await supabase
+    const { error: userUpdateError }: { error: any } = await supabase
       .from('users')
       .update({ token: null }) 
       .eq('id', userId)
@@ -57,10 +57,10 @@ export async function DELETE(request: NextRequest) {
 
     // If tokenDeleteError occurred but userUpdateError did not, it's a partial success.
     if (tokenDeleteError && !userUpdateError) {
-        return NextResponse.json({ message: `Token nullified for user, but failed to delete from token generation table: ${tokenDeleteError.message}` }, { status: 207 });
+        return NextResponse.json({ message: `Failed to delete token from generation table, but token nullified for user: ${tokenDeleteError.message}` }, { status: 207 });
     }
-    if (!tokenDeleteError && userUpdateError) { // Should have been caught above, but for completeness
-        return NextResponse.json({ message: `Token deleted from generation table, but failed to nullify for user: ${userUpdateError.message}` }, { status: 207 });
+    else if (!tokenDeleteError && userUpdateError) { // Should have been caught above, but for completeness
+        return NextResponse.json({ message: `Token deleted from generation table, but failed to nullify for user: ${userUpdateError?.message || 'Unknown error'}` }, { status: 207 });
     }
 
 
