@@ -113,14 +113,20 @@ export async function GET(request: NextRequest) {
     }) : null;
   } else if (jobsForRunIdParam) {
     urlToFetch = `https://api.github.com/repos/${ORG}/${REPO}/actions/runs/${jobsForRunIdParam}/jobs`;
-    transformFunction = (data: any): { jobs: SimpleJob[] } | null => data && Array.isArray(data.jobs) ? ({
-      jobs: data.jobs.map((job: any) => ({
-        id: job.id,
-        name: job.name,
-        status: job.status,
-        conclusion: job.conclusion,
-      })),
-    }) : { jobs: [] };
+   transformFunction = (data: any): { jobs: SimpleJob[] } | null => {
+     if (data && typeof data === 'object' && 'error' in data) {
+       console.error("Error fetching jobs:", data.error);
+       return { jobs: [] };
+     }
+     return data && Array.isArray(data.jobs) ? ({
+       jobs: data.jobs.map((job: any) => ({
+         id: job.id,
+         name: job.name,
+         status: job.status,
+         conclusion: job.conclusion,
+       })),
+     }) : { jobs: [] };
+   };
   } else {
     urlToFetch = `https://api.github.com/repos/${ORG}/${REPO}/actions/workflows/${WORKFLOW_FILE_NAME}/runs?per_page=${perPage}`;
     if (workflowStatusFilter) {
