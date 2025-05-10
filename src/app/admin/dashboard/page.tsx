@@ -558,16 +558,17 @@ export default function AdminDashboardPage() {
     };
 
     return (
-        <div className="min-h-screen bg-gray-900 text-white p-4">
+        <div className="min-h-screen" style={{ backgroundColor: '#1a1a1a', color: 'white', padding: '1rem' }}>
             <div className="max-w-7xl mx-auto">
                 {/* Add logout button at the top */}
                 <div className="flex justify-between mb-4 items-center">
-                    <div className="text-xl font-semibold">
+                    <div className="text-xl font-semibold" >
                         Welcome, {adminName || 'Admin'}
                     </div>
                     <button
                         onClick={handleLogout}
-                        className="bg-red-600 hover:bg-red-700 text-white font-bold py-2 px-4 rounded focus:outline-none focus:shadow-outline"
+                        className="text-white font-bold py-2 px-4 rounded focus:outline-none focus:shadow-outline hover:bg-green-700"
+                        style={{ backgroundColor: '#22c55e' }}
                     >
                         Logout
                     </button>
@@ -577,18 +578,18 @@ export default function AdminDashboardPage() {
 
                 {/* Toast Notification */}
                 {toastMessage && (
-                    <div className="fixed bottom-4 right-4 bg-green-600 text-white px-4 py-2 rounded-lg shadow-lg">
+                    <div className="fixed top-4 right-4 text-white px-4 py-2 rounded-lg shadow-lg" style={{ backgroundColor: '#f87171' }}>
                         {toastMessage}
                     </div>
                 )}
 
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
                     {Object.keys(tokens).map((duration) => (
-                        <div key={duration} className="bg-gray-800 p-6 rounded-lg">
-                            <h3 className="text-lg font-bold mb-4">
+                        <div key={duration} className="p-6 rounded-lg" style={{ backgroundColor: 'rgba(25, 0, 0, 0.7)' }}>
+                            <h3 className="text-lg font-bold mb-4 text-center" style={{ color: '#FFFF00' }}>
                                 {duration.charAt(0).toUpperCase() + duration.slice(1)} Token
                             </h3>
-                            <div className="bg-gray-700 p-3 rounded mb-4 break-all flex items-center justify-between">
+                            <div className="p-3 rounded mb-4 break-all flex items-center justify-between" style={{ backgroundColor: 'rgba(25, 0, 0, 0.7)' }}>
                                 <span className="text-sm font-mono flex-1 truncate mr-2">
                                     {tokens[duration] ? tokens[duration] : 'No active token'}
                                 </span>
@@ -598,9 +599,10 @@ export default function AdminDashboardPage() {
                             </div>
 
                             <button
-                                className={`w-full py-2 px-4 rounded font-semibold ${
-                                    isLoading[duration] ? 'bg-purple-700 cursor-not-allowed' : 'bg-purple-600 hover:bg-purple-700'
+                                className={`w-full py-2 px-4 rounded font-semibold text-white ${
+                                    isLoading[duration] ? 'cursor-not-allowed' : 'hover:bg-purple-700'
                                 }`}
+                                style={{ backgroundColor: isLoading[duration] ? '#555' : '#purple-600', color: 'white' }}
                                 onClick={() => generateToken(duration)}
                                 disabled={isLoading[duration]}
                             >
@@ -612,7 +614,7 @@ export default function AdminDashboardPage() {
                                 <h4 className="text-sm font-bold mb-2">Token History</h4>
                                 <div className="max-h-40 overflow-y-auto scrollbar-thin scrollbar-thumb-purple-600 scrollbar-track-gray-700 scrollbar-rounded">
                                     {tokenHistory[duration].map((item, index) => (
-                                        <div key={index} className="bg-gray-700 p-2 rounded mb-2 text-sm flex justify-between items-center">
+                                        <div key={index} className="p-2 rounded mb-2 text-sm flex justify-between items-center" style={{ backgroundColor: 'rgba(25, 0, 0, 0.7)' }}>
                                             <div className="flex-1 truncate mr-2">
                                                 <span className="font-mono">{item.token}</span>
                                                 <span className={`ml-2 ${item.status === 'Active' ? 'text-green-500' : item.status === 'InUse' ? 'text-red-500' : 'text-gray-400'}`}>
@@ -622,17 +624,17 @@ export default function AdminDashboardPage() {
                                             <div className="flex items-center gap-2">
                                                 <button
                                                     onClick={() => copyTokenToClipboard(item.token)}
-                                                    className="text-blue-500 hover:text-blue-700 px-2 py-1 rounded"
-                                                >
-                                                    Copy
+                                                        className="px-2 py-1 rounded text-white" style={{ color: 'white' }}
+                                                    >
+                                                        Copy
                                                 </button>
                                                 {item.status === 'Active' && (
                                                     <button
                                                         onClick={() => handleDeleteToken(item.id, duration)}
                                                         disabled={isDeletingToken[duration][item.id] || false}
-                                                        className={`text-red-500 hover:text-red-700 px-2 py-1 rounded ${
-                                                            isDeletingToken[duration][item.id] ? 'opacity-50 cursor-not-allowed' : ''
-                                                        }`}
+                                                        className={`text-white hover:text-red-700 px-2 py-1 rounded ${
+                                                           isDeletingToken[duration][item.id] ? 'opacity-50 cursor-not-allowed' : ''
+                                                        }`} style={{ color: 'white' }}
                                                     >
                                                         {isDeletingToken[duration][item.id] ? 'Deleting...' : 'Delete'}
                                                     </button>
@@ -648,11 +650,11 @@ export default function AdminDashboardPage() {
 
                 {/* Token User Details */}
                 <div className="mt-8">
-                    <h3 className="text-xl font-bold mb-4">Token User Details</h3>
-                    <div className="bg-gray-800 p-6 rounded-lg overflow-x-auto">
-                        <table className="w-full table-auto border border-gray-600">
+                    <h3 className="text-xl font-bold mb-4" style={{ color: '#FFFFFF' }}>Token User Details</h3>
+                    <div className="p-6 rounded-lg overflow-x-auto" style={{ backgroundColor: 'rgba(25, 0, 0, 0.7)' }}>
+                        <table className="w-full table-auto" style={{ border: '1px solid rgba(255, 0, 0, 0.3)' }}>
                             <thead>
-                                <tr className="bg-gray-700">
+                                <tr style={{ backgroundColor: 'rgba(25, 0, 0, 0.7)' }}>
                                     <th className="px-4 py-2 min-w-[200px] text-left">Token</th>
                                     <th className="px-4 py-2 min-w-[100px] text-left">Duration</th>
                                     <th className="px-4 py-2 min-w-[150px] text-left">Username</th>
@@ -667,7 +669,7 @@ export default function AdminDashboardPage() {
                                     tokenUsers.map((user, index) => {
                                         const status = getTokenStatus(user.token, user.expiresat);
                                         return (
-                                            <tr key={index} className={`text-sm ${index % 2 === 0 ? 'bg-gray-800' : 'bg-gray-700'} hover:bg-gray-600`}>
+                                            <tr key={index} className={`text-sm hover:bg-gray-600`} style={{ backgroundColor: index % 2 === 0 ? 'rgba(25, 0, 0, 0.7)' : 'rgba(25, 0, 0, 0.7)' }}>
                                                 <td className="px-4 py-2 break-all whitespace-nowrap">{user.token}</td>
                                                 <td className="px-4 py-2 whitespace-nowrap">{user.duration}</td>
                                                 <td className="px-4 py-2 whitespace-nowrap">{user.username}</td>
@@ -698,7 +700,7 @@ export default function AdminDashboardPage() {
                                                                 showToast('Error: User ID or Token is missing.');
                                                             }
                                                         }}
-                                                        className="text-red-500 hover:text-red-700 px-2 py-1 rounded"
+                                                        className="text-white hover:text-red-700 px-2 py-1 rounded" style={{ color: 'white' }}
                                                     >
                                                         Delete
                                                     </button>
@@ -711,9 +713,9 @@ export default function AdminDashboardPage() {
                                                                 showToast('Error: User ID is missing.');
                                                             }
                                                         }}
-                                                        className="text-blue-500 hover:text-blue-700 px-2 py-1 rounded ml-2"
-                                                    >
-                                                        Renew Token
+                                                        className="px-2 py-1 rounded ml-2 text-white" style={{ color: 'white' }}
+                                                   >
+                                                       Renew Token
                                                     </button>
                                                 </td>
                                             </tr>
@@ -735,14 +737,14 @@ export default function AdminDashboardPage() {
             {/* Renew Token Modal */}
             {isRenewModalOpen && (
                 <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center">
-                    <div className="bg-gray-800 p-6 rounded-lg w-96">
-                        <h3 className="text-lg font-bold mb-4">Renew Token</h3>
+                    <div className="p-6 rounded-lg w-96 border border-gray-600" style={{ backgroundColor: '#1a1a1a', borderColor: '#333' }}>
+                        <h3 className="text-lg font-bold mb-4" style={{ color: '#FFFFFF' }}>Renew Token</h3>
                         <label className="block mb-4">
                             <span className="text-sm font-semibold">Select Duration:</span>
                             <select
                                 value={selectedDuration}
                                 onChange={(e) => setSelectedDuration(e.target.value)}
-                                className="w-full p-2 bg-gray-700 rounded mt-1"
+                                className="w-full p-2 rounded mt-1" style={{ backgroundColor: 'rgba(25, 0, 0, 0.7)' }}
                             >
                                 <option value="3month">3 Months</option>
                                 <option value="6month">6 Months</option>
@@ -752,16 +754,16 @@ export default function AdminDashboardPage() {
                         <div className="flex justify-end gap-2">
                             <button
                                 onClick={closeRenewModal}
-                                className="bg-gray-600 hover:bg-gray-700 px-4 py-2 rounded"
+                                className="px-4 py-2 rounded" style={{ backgroundColor: '#555' }}
                             >
                                 Cancel
                             </button>
                             <button
                                 onClick={handleRenewToken}
-                                className="bg-blue-600 hover:bg-blue-700 px-4 py-2 rounded"
+                                className="px-4 py-2 rounded text-white" style={{ backgroundColor: '#3b82f6' }}
                             >
                                 Renew
-                            </button>
+                           </button>
                         </div>
                     </div>
                 </div>
@@ -770,25 +772,25 @@ export default function AdminDashboardPage() {
             {/* Delete Confirmation Modal */}
             {isDeleteModalOpen && (
                 <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center">
-                    <div className="bg-gray-800 p-6 rounded-lg w-96">
-                        <h3 className="text-lg font-bold mb-4">Delete Confirmation</h3>
+                    <div className="p-6 rounded-lg w-96 border border-gray-600" style={{ backgroundColor: '#1a1a1a', borderColor: '#333' }}>
+                        <h3 className="text-lg font-bold mb-4" style={{ color: '#FFFFFF' }}>Delete Confirmation</h3>
                         <p className="mb-4">What do you want to delete?</p>
                         <div className="flex justify-end gap-2">
                             <button
                                 onClick={() => handleDeleteAction('token')}
-                                className="bg-red-600 hover:text-red-700 px-4 py-2 rounded"
+                                className="px-4 py-2 rounded text-white" style={{ backgroundColor: '#dc2626' }}
                             >
                                 Delete Token
-                            </button>
-                            <button
-                                onClick={() => handleDeleteAction('user')}
-                                className="bg-red-600 hover:text-red-700 px-4 py-2 rounded"
+                           </button>
+                           <button
+                               onClick={() => handleDeleteAction('user')}
+                               className="px-4 py-2 rounded text-white" style={{ backgroundColor: '#dc2626' }}
                             >
                                 Delete User
-                            </button>
+                           </button>
                             <button
                                 onClick={closeDeleteModal}
-                                className="bg-gray-600 hover:text-gray-700 px-4 py-2 rounded"
+                                className="px-4 py-2 rounded" style={{ backgroundColor: '#555' }}
                             >
                                 Cancel
                             </button>
@@ -796,6 +798,6 @@ export default function AdminDashboardPage() {
                     </div>
                 </div>
             )}
-        </div>
+        </div >
     );
 }
