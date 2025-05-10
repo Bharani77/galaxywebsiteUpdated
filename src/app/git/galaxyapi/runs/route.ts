@@ -43,14 +43,14 @@ async function fetchFromGitHub(url: string, options: RequestInit = {}) {
   // GitHub usually returns 200 with an empty array/object, not 204 for list endpoints.
   // A specific GET for a resource that doesn't exist would be a 404 (handled by !response.ok).
   // If a GET endpoint *could* return 204, this handles it by providing null data.
-  if (response.status === 204) { 
-    return { rawData: null, status: 204, ok: true }; 
+  if (response.status === 204) {
+    return NextResponse.json(null, { status: 204 });
   }
   
   // For other successful GETs (typically 200 with data)
   try {
     const rawData = await response.json();
-    return { rawData, status: response.status, ok: true };
+    return NextResponse.json({ rawData, status: response.status, ok: true }, { status: response.status });
   } catch (e: any) {
     // If response.json() fails (e.g. empty body but status 200, or malformed JSON from GitHub)
     console.error(`Failed to parse JSON response from GitHub for URL ${url}. Status: ${response.status}`, e.message);
@@ -149,7 +149,15 @@ export async function GET(request: NextRequest) {
 
   // At this point, result MUST be of type { rawData: any; status: number; ok: boolean; }
   // and result.ok should be true.
-  if (!result.ok) { 
+  let resultAny: any = result;
+  
+  if (resultAny instanceof NextResponse) {
+    return resultAny;
+  }
+
+  // At this point, result MUST be of type { rawData: any; status: number; ok: boolean; }
+  // and result.ok should be true.
+  if (!resultAny.rawData.ok) {
     // This case should ideally not be hit if fetchFromGitHub's logic for ok:true is sound,
     // but as a safeguard if ok somehow became false without returning a NextResponse.
     console.error("fetchFromGitHub returned ok:false without a NextResponse:", result);
@@ -158,8 +166,8 @@ export async function GET(request: NextRequest) {
   
   // result.rawData could be null if GitHub returned 204 and fetchFromGitHub passed it as such.
   // The transformFunctions are expected to handle null rawData gracefully.
-  const transformedData = transformFunction(result.rawData);
-  return NextResponse.json(transformedData, { status: result.status });
+  const transformedData = transformFunction(resultAny.rawData);
+  return NextResponse.json(transformedData, { status: resultAny.rawData.status });
 }
 
 export async function POST(request: NextRequest) {
