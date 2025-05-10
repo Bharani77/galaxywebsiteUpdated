@@ -1,15 +1,15 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
+import React, { useState } from "react"; // Removed useEffect as it's not used
 import { useRouter } from "next/navigation";
-import { createClient } from "@supabase/supabase-js";
+// import { createClient } from "@supabase/supabase-js"; // Supabase client no longer needed here
 import Link from "next/link";
 import { ToastContainer, toast } from 'react-toastify';
 import 'react-toastify/dist/ReactToastify.css';
 
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
-const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
-const supabase = createClient(supabaseUrl!, supabaseAnonKey!);
+// const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL; // No longer needed
+// const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY; // No longer needed
+// const supabase = createClient(supabaseUrl!, supabaseAnonKey!); // No longer needed
 
 export default function SignUpPage() {
     const [username, setUsername] = useState("");
@@ -30,57 +30,8 @@ export default function SignUpPage() {
         });
     };
 
-    const verifyToken = async (inputToken: string) => {
-        try {
-            const { data, error } = await supabase
-                .from('tokengenerate')
-                .select('*')
-                .eq('token', inputToken);
-
-            if (error) { 
-                showToast("Token verification failed. Please try again.");
-                return false;
-            }
-
-            if (!data || data.length === 0) {
-                showToast("Invalid token provided.");
-                return false;
-            }
-
-            if (data.length > 1) {
-                console.warn('Multiple tokens found for the same token value. Using the first one.');
-            }
-
-            const tokenData = data[0];
-
-            if (tokenData.status === 'InUse') {
-                showToast("Token has already been used.");
-                return false;
-            } 
-
-            return true;
-        } catch (error) {
-            showToast("An unexpected error occurred during token verification.");
-            return false;
-        }
-    };
-
-    const associateTokenWithUser = async (token: string, userId: string) => {
-        try {
-            const { error } = await supabase
-                .from('tokengenerate')
-                .update({ userid: userId })
-                .eq('token', token)
-                .select();
-
-            if (error) {
-                showToast("Error associating token with user.");
-                return;
-            }
-        } catch (error) {
-            showToast("Error associating token with user.");
-        }
-    };
+    // verifyToken, associateTokenWithUser, and direct DB calls for user/token updates
+    // are now handled by the /api/auth/signup backend route.
 
     const handleSubmit = async (event: React.FormEvent) => {
         event.preventDefault();
@@ -107,47 +58,31 @@ export default function SignUpPage() {
                 return;
             }
 
-            const isTokenValid = await verifyToken(token);
-            if (!isTokenValid) return;
+            // Call the backend API for signup
+            const response = await fetch('/api/auth/signup', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({ username, password, token }),
+            });
 
-            const { data: userData, error } = await supabase
-                .from("users")
-                .insert([{ username, password, token }])
-                .select()
-                .single();
+            const data = await response.json();
 
-            if (error && error.code === '23505') {
-                showToast("Username already taken. Please try a different one.");
-                return;
+            if (response.ok) { // Status 201 Created is also response.ok
+                showToast(data.message || "Signup successful!", 'success');
+                setTimeout(() => {
+                    setUsername("");
+                    setPassword("");
+                    setToken("");
+                    router.push("/signin");
+                }, 2000);
+            } else {
+                showToast(data.message || "Signup failed. Please try again.");
             }
-
-            if (error) {
-                showToast("Error: " + (error.message || 'Failed to create user'));
-                return;
-            }
-
-            const userId = userData.id;
-            await associateTokenWithUser(token, userId);
-
-            const { error: updateError } = await supabase
-                .from('tokengenerate')
-                .update({ status: 'InUse' })
-                .eq('token', token);
-            
-            if (updateError) {
-                showToast("Error updating token status.");
-                return;
-            }
-
-            showToast("Signup successful!", 'success');
-            setTimeout(() => {
-                setUsername("");
-                setPassword("");
-                setToken("");
-                router.push("/signin");
-            }, 2000);
         } catch (error) {
-            showToast("An unexpected error occurred.");
+            console.error("Signup error:", error);
+            showToast("An unexpected error occurred during signup.");
         } finally {
             setIsLoading(false);
         }

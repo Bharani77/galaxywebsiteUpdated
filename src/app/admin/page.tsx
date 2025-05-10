@@ -60,46 +60,34 @@ export default function AdminLoginPage() {
         setError(""); // Clear any previous errors
 
         try {
-            const { data, error } = await supabase
-                .from("admin")
-                .select("*")
-                .eq("username", username)
-                .single();
+            const response = await fetch('/api/admin/auth/signin', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({ username, password }),
+            });
 
-            if (error) {
-                console.error("Error querying database:", error);
-                setError("An error occurred during login. Please try again.");
-                return;
+            const responseData = await response.json();
+
+            if (response.ok) {
+                // Store admin session data in localStorage
+                localStorage.setItem(ADMIN_STORAGE_KEYS.ADMIN_ID, responseData.adminId);
+                localStorage.setItem(ADMIN_STORAGE_KEYS.ADMIN_USERNAME, responseData.adminUsername);
+                localStorage.setItem(ADMIN_STORAGE_KEYS.ADMIN_SESSION_ID, responseData.adminSessionId);
+                
+                // Redirect to dashboard
+                router.push("/admin/dashboard");
+            } else {
+                setError(responseData.message || "Login failed. Please try again.");
             }
-
-            if (!data) {
-                setError("Invalid username or password.");
-                return;
-            }
-
-            if (data.password !== password) {
-                setError("Invalid username or password.");
-                return;
-            }
-
-            // Store admin session data in localStorage instead of sessionStorage
-            const adminSessionId = generateSessionId();
-            localStorage.setItem(ADMIN_STORAGE_KEYS.ADMIN_ID, data.id);
-            localStorage.setItem(ADMIN_STORAGE_KEYS.ADMIN_USERNAME, data.username);
-            localStorage.setItem(ADMIN_STORAGE_KEYS.ADMIN_SESSION_ID, adminSessionId);
-
-            // Redirect to dashboard
-            router.push("/admin/dashboard");
         } catch (error) {
-            console.error("Error:", error);
-            setError("An unexpected error occurred.");
+            console.error("Login API call error:", error);
+            setError("An unexpected error occurred. Please check your connection.");
         }
     };
 
-    // Generate a unique session ID
-    const generateSessionId = (): string => {
-        return crypto.randomUUID();
-    };
+    // generateSessionId is now handled by the backend.
 
     // Show loading state while checking session
     if (loading) {

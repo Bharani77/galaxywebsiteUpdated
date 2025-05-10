@@ -49,16 +49,24 @@ const GalaxyForm: React.FC = () => {
   const [redeployMode, setRedeployMode] = useState<boolean>(false);
   const [showThankYouMessage, setShowThankYouMessage] = useState<boolean>(false);
   const [activationProgressTimerId, setActivationProgressTimerId] = useState<number | null>(null);
-  
-  const GITHUB_TOKEN = process.env.NEXT_PUBLIC_GITHUB_TOKEN;
-  const ORG = 'GalaxyKickLock';
-  const REPO = 'GalaxyKickPipeline';
-  const WORKFLOW_FILE_NAME = 'blank.yml';
 
-  const apiHeaders = {
-    'Accept': 'application/vnd.github+json',
-    'Authorization': `token ${GITHUB_TOKEN}`,
-    'X-GitHub-Api-Version': '2022-11-28'
+  const getApiAuthHeaders = (): Record<string, string> => {
+    const headers: Record<string, string> = {
+      'Content-Type': 'application/json',
+    };
+    const token = sessionStorage.getItem('sessionToken');
+    const userId = sessionStorage.getItem('userId');
+    const sessionId = sessionStorage.getItem('sessionId');
+
+    // Only add auth headers if all parts are present
+    if (token && userId && sessionId) {
+      headers['Authorization'] = `Bearer ${token}`;
+      headers['X-User-ID'] = userId;
+      headers['X-Session-ID'] = sessionId;
+    } else {
+      console.warn('Missing critical session data (token, userId, or sessionId) in sessionStorage. API calls will proceed without authentication headers.');
+    }
+    return headers;
   };
   
   const formNames = {
@@ -87,25 +95,33 @@ const GalaxyForm: React.FC = () => {
   };
 
   const checkInitialDeploymentStatus = async (logicalUsername: string) => {
-    if (!GITHUB_TOKEN) {
-      console.warn("GitHub token not available for initial status check.");
-      setIsDeployed(false);
-      setShowDeployPopup(true);
-      setDeploymentStatus('Deployment is required (token configuration issue).');
-      return;
-    }
     const jobNameToFind = `Run for ${logicalUsername}`;
     let isActiveRunFound = false;
     console.log(`Checking initial deployment status for: ${jobNameToFind}`);
   
     try {
-      const runsResponse = await fetch(`https://api.github.com/repos/${ORG}/${REPO}/actions/workflows/${WORKFLOW_FILE_NAME}/runs?status=in_progress&per_page=10`, { headers: apiHeaders });
+      const authHeaders = getApiAuthHeaders();
+      if (!authHeaders['Authorization']) { // Check if essential auth headers are missing
+        setDeploymentStatus('Authentication details missing. Please sign in again.');
+        setIsDeployed(false);
+        setShowDeployPopup(true);
+        return;
+      }
+      const runsResponse = await fetch(`/git/galaxyapi/runs?status=in_progress&per_page=10`, { headers: authHeaders });
       if (runsResponse.ok) {
         const runsData = await runsResponse.json();
-        const sortedRuns = runsData.workflow_runs.sort((a: any, b: any) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+        const workflowRuns = runsData.workflow_runs || runsData;
+        if (!Array.isArray(workflowRuns)) {
+          console.error("Invalid runs data received from backend:", workflowRuns);
+          setIsDeployed(false);
+          setShowDeployPopup(true);
+          setDeploymentStatus('Error fetching deployment status.');
+          return;
+        }
+        const sortedRuns = workflowRuns.sort((a: any, b: any) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
   
         for (const run of sortedRuns) {
-          const jobsResponse = await fetch(run.jobs_url, { headers: apiHeaders });
+          const jobsResponse = await fetch(`/git/galaxyapi/runs?jobsForRunId=${run.id}`, { headers: authHeaders });
           if (jobsResponse.ok) {
             const jobsData = await jobsResponse.json();
             if (jobsData.jobs && jobsData.jobs.find((job: any) => job.name === jobNameToFind)) {
@@ -116,13 +132,22 @@ const GalaxyForm: React.FC = () => {
               setDeploymentStatus(`Active deployment detected (Run ID: ${run.id}).`);
               break;
             }
+          } else {
+            console.warn(`Failed to fetch jobs for run ${run.id} from backend:`, await jobsResponse.text());
           }
         }
       } else {
-        console.error("Failed to fetch initial runs status:", await runsResponse.text());
+        const errorText = await runsResponse.text();
+        console.error("Failed to fetch initial runs status from backend:", errorText);
+        if (runsResponse.status === 401) {
+            setDeploymentStatus('Authentication error. Please sign in again.');
+        } else {
+            setDeploymentStatus('Could not check deployment status. See console for details.');
+        }
       }
     } catch (error) {
       console.error("Error checking initial deployment status:", error);
+      setDeploymentStatus('Error connecting to backend for status check.');
     }
   
     if (!isActiveRunFound) {
@@ -166,13 +191,6 @@ const GalaxyForm: React.FC = () => {
     if (!isPollingStatus) setIsPollingStatus(true); 
     setRedeployMode(false);
 
-    if (!GITHUB_TOKEN) {
-      setDeploymentStatus('Deployment failed: GitHub token not configured.');
-      setIsPollingStatus(false);
-      setRedeployMode(true);
-      return;
-    }
-
     const jobNameToFind = `Run for ${currentLogicalUsername}`;
     console.log(`Initiating workflow run search. Target job name: "${jobNameToFind}"`);
 
@@ -181,6 +199,14 @@ const GalaxyForm: React.FC = () => {
     const findRunIdInterval = 5 * 1000;
     const findRunIdStartTime = Date.now();
     let findRunIdTimer: number | null = null;
+
+    const authHeaders = getApiAuthHeaders();
+    if (!authHeaders['Authorization']) {
+      setDeploymentStatus('Authentication details missing for deployment check. Please sign in again.');
+      setIsPollingStatus(false);
+      setRedeployMode(true);
+      return;
+    }
 
     const attemptToFindRunId = async () => {
       console.log('Attempting to find workflow run ID...');
@@ -200,18 +226,24 @@ const GalaxyForm: React.FC = () => {
       }
 
       try {
-        const runsResponse = await fetch(`https://api.github.com/repos/${ORG}/${REPO}/actions/workflows/${WORKFLOW_FILE_NAME}/runs?per_page=30`, { headers: apiHeaders });
+        const runsResponse = await fetch(`/git/galaxyapi/runs?per_page=30`, { headers: authHeaders });
         if (!runsResponse.ok) {
-          const errorData = await runsResponse.json().catch(() => ({ message: 'Failed to parse error response' }));
-          throw new Error(`Failed to fetch workflow runs: ${runsResponse.status} ${errorData.message || runsResponse.statusText}`);
+          const errorText = await runsResponse.text();
+          const errorData = JSON.parse(errorText || "{}");
+          throw new Error(`Failed to fetch workflow runs from backend: ${runsResponse.status} ${errorData.message || errorText}`);
         }
         const runsData = await runsResponse.json();
-        const sortedRuns = runsData.workflow_runs.sort((a: any, b: any) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
-        console.log(`Fetched ${sortedRuns.length} runs in current attempt.`);
+        const workflowRuns = runsData.workflow_runs || runsData; 
+         if (!Array.isArray(workflowRuns)) {
+          console.error("Invalid runs data received from backend:", workflowRuns);
+          throw new Error('Invalid runs data from backend.');
+        }
+        const sortedRuns = workflowRuns.sort((a: any, b: any) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+        console.log(`Fetched ${sortedRuns.length} runs in current attempt from backend.`);
 
         for (const run of sortedRuns) {
           console.log(`Checking run ID: ${run.id}, Created: ${run.created_at}, Status: ${run.status}, URL: ${run.html_url}`);
-          const jobsResponse = await fetch(run.jobs_url, { headers: apiHeaders });
+          const jobsResponse = await fetch(`/git/galaxyapi/runs?jobsForRunId=${run.id}`, { headers: authHeaders });
           if (jobsResponse.ok) {
             const jobsData = await jobsResponse.json();
             if (jobsData.jobs && jobsData.jobs.length > 0) {
@@ -226,7 +258,7 @@ const GalaxyForm: React.FC = () => {
               console.log(`No jobs listed for run ${run.id} yet.`);
             }
           } else {
-            console.warn(`Failed to fetch jobs for run ${run.id}. Status: ${jobsResponse.status}`);
+            console.warn(`Failed to fetch jobs for run ${run.id} from backend. Status: ${jobsResponse.status}`);
           }
         }
 
@@ -250,7 +282,7 @@ const GalaxyForm: React.FC = () => {
         }
       } catch (error) {
         console.error('Error during attemptToFindRunId:', error);
-        setDeploymentStatus('Error while trying to find workflow run.');
+        setDeploymentStatus(`Error while trying to find workflow run: ${error instanceof Error ? error.message : String(error)}`);
         if (findRunIdTimer !== null) window.clearInterval(findRunIdTimer);
         setIsPollingStatus(false);
         setRedeployMode(true);
@@ -275,10 +307,11 @@ const GalaxyForm: React.FC = () => {
         }
 
         try {
-          const runStatusResponse = await fetch(`https://api.github.com/repos/${ORG}/${REPO}/actions/runs/${runIdToPoll}`, { headers: apiHeaders });
+          const runStatusResponse = await fetch(`/git/galaxyapi/runs?runId=${runIdToPoll}`, { headers: authHeaders });
           if (!runStatusResponse.ok) {
             if (statusPollTimer !== null) window.clearInterval(statusPollTimer);
-            setDeploymentStatus('Failed to fetch deployment status. Please try again.');
+            const errorText = await runStatusResponse.text();
+            setDeploymentStatus(`Failed to fetch deployment status from backend. ${errorText}`);
             setIsPollingStatus(false);
             setIsDeployed(false);
             setRedeployMode(true);
@@ -331,6 +364,13 @@ const GalaxyForm: React.FC = () => {
     let timer: number | null = null;
   
     console.log(`Polling for cancellation of run ID: ${runId}`);
+    const authHeaders = getApiAuthHeaders();
+    if (!authHeaders['Authorization']) {
+      setDeploymentStatus('Authentication details missing for cancellation poll. Please sign in again.');
+      setIsUndeploying(false); // Or appropriate state update
+      return;
+    }
+
     const check = async () => {
       console.log(`pollForCancelledStatus: Checking run ${runId}...`);
         if (Date.now() - startTime > pollTimeout) {
@@ -345,11 +385,12 @@ const GalaxyForm: React.FC = () => {
         }
   
       try {
-        const response = await fetch(`https://api.github.com/repos/${ORG}/${REPO}/actions/runs/${runId}`, { headers: apiHeaders });
+        const response = await fetch(`/git/galaxyapi/runs?runId=${runId}`, { headers: authHeaders });
           if (!response.ok) {
             if (timer !== null) window.clearInterval(timer);
-            setDeploymentStatus('Error fetching run status during undeploy. You may need to redeploy.');
-            console.error(`pollForCancelledStatus: Error fetching status for run ${runId}. Status: ${response.status}`);
+            const errorText = await response.text();
+            setDeploymentStatus(`Error fetching run status during undeploy from backend. ${errorText}`);
+            console.error(`pollForCancelledStatus: Error fetching status for run ${runId} from backend. Status: ${response.status}`);
             setIsUndeploying(false);
             setIsDeployed(false);
             setRedeployMode(true);
@@ -367,7 +408,7 @@ const GalaxyForm: React.FC = () => {
           setShowDeployPopup(true); 
           setRedeployMode(false); 
           console.log(`pollForCancelledStatus: Run ${runId} successfully cancelled.`);
-        } else if (runDetails.status === 'completed') { // And not cancelled (implicitly, due to previous if)
+        } else if (runDetails.status === 'completed') {
           if (timer !== null) window.clearInterval(timer);
           setDeploymentStatus(`Undeploy failed: Workflow completed (${runDetails.conclusion}), not cancelled. You may need to redeploy.`);
           console.log(`pollForCancelledStatus: Run ${runId} completed with ${runDetails.conclusion}, but was expected to be cancelled.`);
@@ -413,29 +454,38 @@ const GalaxyForm: React.FC = () => {
     setShowDeployPopup(true); 
     setDeploymentStatus('Attempting to cancel current deployment...');
 
-    if (!GITHUB_TOKEN) {
-      setDeploymentStatus('GitHub token not configured for undeploy.');
+    const jobNameToFind = `Run for ${username}`;
+    let runIdToCancel: number | null = null;
+    const authHeaders = getApiAuthHeaders();
+
+    if (!authHeaders['Authorization']) {
+      setDeploymentStatus('Authentication details missing for undeploy. Please sign in again.');
       setIsUndeploying(false);
+      setShowDeployPopup(true);
       return;
     }
-    const jobNameToFind = `Run for ${username}`; 
-    let runIdToCancel: number | null = null;
 
     try {
       console.log(`handleUndeploy: Looking for in-progress runs for job "${jobNameToFind}"`);
-      const runsResponse = await fetch(`https://api.github.com/repos/${ORG}/${REPO}/actions/workflows/${WORKFLOW_FILE_NAME}/runs?status=in_progress`, { headers: apiHeaders });
+      const runsResponse = await fetch(`/git/galaxyapi/runs?status=in_progress`, { headers: authHeaders });
       if (!runsResponse.ok) {
-        console.error(`handleUndeploy: Failed to fetch in-progress runs. Status: ${runsResponse.status}`);
-        throw new Error('Failed to fetch in-progress runs for undeploy.');
+        const errorText = await runsResponse.text();
+        console.error(`handleUndeploy: Failed to fetch in-progress runs from backend. Status: ${runsResponse.status}`, errorText);
+        throw new Error('Failed to fetch in-progress runs for undeploy from backend.');
       }
       
       const runsData = await runsResponse.json();
-      const sortedRuns = runsData.workflow_runs.sort((a: any, b: any) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
-      console.log(`handleUndeploy: Found ${sortedRuns.length} in-progress runs.`);
+      const workflowRuns = runsData.workflow_runs || runsData; 
+      if (!Array.isArray(workflowRuns)) {
+        console.error("Invalid runs data received from backend for undeploy:", workflowRuns);
+        throw new Error('Invalid runs data from backend for undeploy.');
+      }
+      const sortedRuns = workflowRuns.sort((a: any, b: any) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+      console.log(`handleUndeploy: Found ${sortedRuns.length} in-progress runs from backend.`);
 
       for (const run of sortedRuns) {
         console.log(`handleUndeploy: Checking run ID ${run.id}`);
-        const jobsResponse = await fetch(run.jobs_url, { headers: apiHeaders });
+        const jobsResponse = await fetch(`/git/galaxyapi/runs?jobsForRunId=${run.id}`, { headers: authHeaders });
         if (jobsResponse.ok) {
           const jobsData = await jobsResponse.json();
           if (jobsData.jobs && jobsData.jobs.find((job: any) => job.name === jobNameToFind)) {
@@ -444,7 +494,7 @@ const GalaxyForm: React.FC = () => {
             break;
           }
         } else {
-          console.warn(`handleUndeploy: Failed to fetch jobs for run ${run.id}. Status: ${jobsResponse.status}`);
+          console.warn(`handleUndeploy: Failed to fetch jobs for run ${run.id} from backend. Status: ${jobsResponse.status}`);
         }
       }
 
@@ -458,20 +508,21 @@ const GalaxyForm: React.FC = () => {
         return;
       }
 
-      console.log(`handleUndeploy: Attempting to cancel run ID ${runIdToCancel}`);
-      const cancelResponse = await fetch(`https://api.github.com/repos/${ORG}/${REPO}/actions/runs/${runIdToCancel}/cancel`, {
+      console.log(`handleUndeploy: Attempting to cancel run ID ${runIdToCancel} via backend`);
+      const cancelResponse = await fetch(`/git/galaxyapi/runs?cancelRunId=${runIdToCancel}`, {
         method: 'POST',
-        headers: apiHeaders
+        headers: authHeaders, 
       });
 
       if (cancelResponse.status === 202) { 
         setDeploymentStatus(`Cancellation request sent for run ${runIdToCancel}. Monitoring...`);
-        console.log(`handleUndeploy: Cancellation request for ${runIdToCancel} accepted (202). Starting poll.`);
+        console.log(`handleUndeploy: Cancellation request for ${runIdToCancel} accepted (202) via backend. Starting poll.`);
         pollForCancelledStatus(runIdToCancel); 
       } else {
-        const errorData = await cancelResponse.json().catch(() => ({}));
-        console.error(`handleUndeploy: Failed to cancel workflow run ${runIdToCancel}. Status: ${cancelResponse.status}`, errorData);
-        throw new Error(`Failed to cancel workflow run ${runIdToCancel}: ${cancelResponse.status} ${errorData.message || 'Unknown error'}`);
+        const errorText = await cancelResponse.text();
+        const errorData = JSON.parse(errorText || "{}");
+        console.error(`handleUndeploy: Failed to cancel workflow run ${runIdToCancel} via backend. Status: ${cancelResponse.status}`, errorData);
+        throw new Error(`Failed to cancel workflow run ${runIdToCancel} via backend: ${cancelResponse.status} ${errorData.message || errorText}`);
       }
     } catch (error: any) {
       console.error('handleUndeploy: Error caught:', error);
@@ -497,21 +548,24 @@ const GalaxyForm: React.FC = () => {
     setShowDeployPopup(true); 
     setDeploymentStatus('Dispatching workflow...'); 
     
-    if (!GITHUB_TOKEN) {
-      setDeploymentStatus('Deployment failed: GitHub token not configured.');
+    const authHeaders = getApiAuthHeaders();
+    if (!authHeaders['Authorization']) {
+      setDeploymentStatus('Authentication details missing for deploy. Please sign in again.');
       setIsDeploying(false);
       setRedeployMode(true);
       return;
     }
+    
     try {
-      const response = await fetch(`https://api.github.com/repos/${ORG}/${REPO}/actions/workflows/${WORKFLOW_FILE_NAME}/dispatches`, {
+      const response = await fetch(`/git/galaxyapi/workflow-dispatch`, {
         method: 'POST',
-        headers: { ...apiHeaders, 'Content-Type': 'application/json'},
-        body: JSON.stringify({ ref: 'main', inputs: { username: username } })
+        headers: authHeaders, 
+        body: JSON.stringify({ username: username })
       });
       setIsDeploying(false); 
+
       if (response.status === 204) {
-        setDeploymentStatus('Workflow dispatched. Waiting 10s for GitHub to initialize run...');
+        setDeploymentStatus('Workflow dispatched via backend. Waiting 10s for GitHub to initialize run...');
         setIsPollingStatus(true); 
         setShowDeployPopup(true); 
 
@@ -519,8 +573,9 @@ const GalaxyForm: React.FC = () => {
           startDeploymentCheck(username); 
         }, 10000); 
       } else {
-        const errorData = await response.json().catch(() => ({ message: 'Unknown error during dispatch' }));
-        setDeploymentStatus(`Dispatch failed: ${response.status} ${errorData.message || ''}`);
+        const errorText = await response.text();
+        const errorData = JSON.parse(errorText || "{}");
+        setDeploymentStatus(`Dispatch failed via backend: ${response.status} ${errorData.message || errorText}`);
         setIsDeployed(false); 
         setIsPollingStatus(false); 
         setRedeployMode(true); 
@@ -596,18 +651,36 @@ const GalaxyForm: React.FC = () => {
     })();
     setButtonStates(prev => ({ ...prev, [action]: { ...prev[action], loading: true } }));
     setError('');
+
+    const authHeaders = getApiAuthHeaders();
+    if (!authHeaders['Authorization']) {
+      setError('Authentication details missing. Please sign in again.');
+      setButtonStates(prev => ({ ...prev, [action]: { ...prev[action], loading: false } }));
+      return;
+    }
+
     try {
+      if (!username) {
+        setError('Logical username not available. Cannot perform action.');
+        setButtonStates(prev => ({ ...prev, [action]: { ...prev[action], loading: false } }));
+        return;
+      }
+
       const modifiedFormData = Object.entries(formData).reduce((acc, [key, value]) => {
         acc[`${key}${formNumber}`] = value; return acc;
       }, {} as Record<string, string>);
-      const response = await fetch(`https://${username}.loca.lt/${action}/${formNumber}`, {
+
+      const response = await fetch(`/api/localt/action`, {
         method: 'POST', 
-        headers: { 
-          'Content-Type': 'application/json',
-          'bypass-tunnel-reminder': 'true' 
-        }, 
-        body: JSON.stringify(modifiedFormData)
+        headers: authHeaders, 
+        body: JSON.stringify({
+          action: action,
+          formNumber: formNumber,
+          formData: modifiedFormData,
+          logicalUsername: username 
+        })
       });
+
       if (response.ok) {
         setButtonStates(prev => ({ ...prev, [action]: { loading: false, active: true, text: action === 'start' ? 'Running' : action === 'stop' ? 'Stopped' : 'Updated', },
           ...(action === 'start' ? { stop: { ...prev.stop, active: false, text: 'Stop' }, } : {}),
@@ -616,11 +689,16 @@ const GalaxyForm: React.FC = () => {
         }));
         setError(''); 
       } else {
-        if (action === 'start') { setError('Unable to start - Please try again'); } else { setError(`Unable to ${action} - Please try again`); }
+        const errorText = await response.text();
+        const errorData = JSON.parse(errorText || '{ "message": "Unknown error" }');
+        console.error(`Error performing action ${action} for form ${formNumber} via backend:`, errorData);
+        if (action === 'start') { setError(`Unable to start: ${errorData.message || 'Please try again'}`); } 
+        else { setError(`Unable to ${action}: ${errorData.message || 'Please try again'}`); }
         setButtonStates(prev => ({ ...prev, [action]: { ...prev[action], loading: false, active: false, text: action } }));
       }
     } catch (error) {
-      setError(`Unable to ${action} - Please try again`);
+      console.error(`Client-side error performing action ${action} for form ${formNumber}:`, error);
+      setError(`Unable to ${action}: Network error or client-side issue.`);
       setButtonStates(prev => ({ ...prev, [action]: { ...prev[action], loading: false, active: false, text: action } }));
     }
   };

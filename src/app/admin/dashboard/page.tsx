@@ -1,13 +1,12 @@
 "use client"; // Add this line at the top of the file
 
-import { createClient } from '@supabase/supabase-js';
+// import { createClient } from '@supabase/supabase-js'; // No longer needed directly in this component
 import React, { useState, useEffect, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
-const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
-
-const supabase = createClient(supabaseUrl, supabaseAnonKey);
+// const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!; // Handled by backend routes
+// const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!; // Handled by backend routes
+// const supabase = createClient(supabaseUrl, supabaseAnonKey); // Client-side Supabase instance removed
 
 // Add admin storage keys
 const ADMIN_STORAGE_KEYS = {
@@ -74,6 +73,24 @@ export default function AdminDashboardPage() {
     const [isDeleteModalOpen, setIsDeleteModalOpen] = useState<boolean>(false);
     const [selectedUserForDelete, setSelectedUserForDelete] = useState<{ userId: string; token: string } | null>(null);
     const [toastMessage, setToastMessage] = useState<string | null>(null);
+
+    const getAdminApiAuthHeaders = (): Record<string, string> => {
+        const headers: Record<string, string> = {
+            'Content-Type': 'application/json',
+        };
+        const adminId = localStorage.getItem(ADMIN_STORAGE_KEYS.ADMIN_ID);
+        const adminUsername = localStorage.getItem(ADMIN_STORAGE_KEYS.ADMIN_USERNAME);
+        const adminSessionId = localStorage.getItem(ADMIN_STORAGE_KEYS.ADMIN_SESSION_ID);
+
+        if (adminId && adminUsername && adminSessionId) {
+            headers['X-Admin-ID'] = adminId;
+            headers['X-Admin-Username'] = adminUsername;
+            headers['X-Admin-Session-ID'] = adminSessionId;
+        } else {
+            console.warn('Missing admin session data in localStorage. Admin API calls may fail authentication.');
+        }
+        return headers;
+    };
     
     // Add effect to get admin name from localStorage
     useEffect(() => {
@@ -137,37 +154,32 @@ export default function AdminDashboardPage() {
         setIsLoading((prev) => ({ ...prev, [duration]: true }));
 
         try {
-            // Generate new token
-            const newToken = Array(16)
-                .fill(0)
-                .map(() => {
-                    const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
-                    return chars.charAt(Math.floor(Math.random() * chars.length));
-                })
-                .join('');
-
-            // Insert new token into Supabase
-            const { data: insertedData, error: insertError } = await supabase
-                .from('tokengenerate')
-                .insert([
-                    {
-                        token: newToken,
-                        duration: duration,
-                        status: 'Active',
-                    },
-                ])
-                .select();
-
-            if (insertError) {
-                throw insertError;
+            const authHeaders = getAdminApiAuthHeaders();
+            if (!authHeaders['X-Admin-ID']) {
+                showToast("Admin authentication details missing for generating token.");
+                setIsLoading((prev) => ({ ...prev, [duration]: false }));
+                return;
             }
 
-            if (insertedData) {
+            const response = await fetch('/api/admin/tokens', {
+                method: 'POST',
+                headers: authHeaders,
+                body: JSON.stringify({ duration }),
+            });
+
+            if (!response.ok) {
+                const errorData = await response.json().catch(() => ({ message: "Failed to generate token" }));
+                throw new Error(errorData.message || `HTTP error ${response.status}`);
+            }
+
+            const insertedData = await response.json(); // This is the new token object from the backend
+
+            if (insertedData && insertedData.token && insertedData.id) {
                 // Update token history with the new token
                 const updatedHistory = {
                     ...tokenHistory,
                     [duration]: [
-                        { token: newToken, status: 'Active', id: insertedData[0].id },
+                        { token: insertedData.token, status: insertedData.status || 'Active', id: insertedData.id },
                         ...(tokenHistory[duration].length >= MAX_HISTORY_LENGTH
                             ? tokenHistory[duration].slice(0, MAX_HISTORY_LENGTH - 1)
                             : tokenHistory[duration]),
@@ -175,9 +187,11 @@ export default function AdminDashboardPage() {
                 };
 
                 setTokenHistory(updatedHistory);
-                updateActiveTokens(updatedHistory);
+                updateActiveTokens(updatedHistory); // This will update the displayed active token
 
                 showToast('Token generated successfully!');
+            } else {
+                showToast('Error: Invalid data received from server after token generation.');
             }
         } catch (error) {
             let errorMessage = 'Unknown error occurred';
@@ -204,13 +218,26 @@ export default function AdminDashboardPage() {
         setIsDeletingToken((prev) => ({ ...prev, [duration]: { ...prev[duration], [tokenId]: true } }));
 
         try {
-            // Delete the token from the tokengenerate table
-            const { error: deleteError } = await supabase.from('tokengenerate').delete().eq('id', tokenId);
-
-            if (deleteError) {
-                throw deleteError;
+            const authHeaders = getAdminApiAuthHeaders();
+            if (!authHeaders['X-Admin-ID']) {
+                showToast("Admin authentication details missing for deleting token.");
+                setIsDeletingToken((prev) => ({ ...prev, [duration]: { ...prev[duration], [tokenId]: false } }));
+                return;
             }
 
+            const response = await fetch(`/api/admin/tokens?tokenId=${tokenId}`, {
+                method: 'DELETE',
+                headers: authHeaders,
+            });
+
+            if (!response.ok) {
+                const errorData = await response.json().catch(() => ({ message: "Failed to delete token" }));
+                throw new Error(errorData.message || `HTTP error ${response.status}`);
+            }
+
+            // Token deleted successfully on backend, now update UI
+            showToast('Token deleted successfully from server!');
+            
             // Update the token history locally
             const updatedHistory = {
                 ...tokenHistory,
@@ -245,24 +272,26 @@ export default function AdminDashboardPage() {
         }
 
         try {
-            // Delete the user from the users table
-            const { error: userError } = await supabase.from('users').delete().eq('id', userId);
-
-            if (userError) {
-                throw userError;
+            const authHeaders = getAdminApiAuthHeaders();
+            if (!authHeaders['X-Admin-ID']) {
+                showToast("Admin authentication details missing for deleting user.");
+                return;
             }
 
-            // Delete the associated token from the tokengenerate table
-            const { error: tokenError } = await supabase.from('tokengenerate').delete().eq('token', token);
+            const response = await fetch(`/api/admin/users?userId=${userId}&token=${token}`, {
+                method: 'DELETE',
+                headers: authHeaders,
+            });
 
-            if (tokenError) {
-                throw tokenError;
+            const responseData = await response.json();
+
+            if (!response.ok) {
+                throw new Error(responseData.message || `HTTP error ${response.status}`);
             }
+            
+            showToast(responseData.message || 'User and associated token deleted successfully!');
 
-            console.log('User and associated token deleted successfully!');
-            showToast('User and associated token deleted successfully!');
-
-            // Update the token history by removing the deleted token
+            // Update the token history by removing the deleted token (token value is in `token` variable)
             const updatedHistory = { ...tokenHistory };
             Object.keys(updatedHistory).forEach((duration) => {
                 updatedHistory[duration] = updatedHistory[duration].filter((item) => item.token !== token);
@@ -305,22 +334,25 @@ export default function AdminDashboardPage() {
 
         if (action === 'token') {
             try {
-                // Delete the token from the tokengenerate table
-                const { error: tokenError } = await supabase.from('tokengenerate').delete().eq('token', token);
-
-                if (tokenError) {
-                    throw tokenError;
+                const authHeaders = getAdminApiAuthHeaders();
+                if (!authHeaders['X-Admin-ID']) {
+                    showToast("Admin authentication details missing for deleting token link.");
+                    closeDeleteModal();
+                    return;
                 }
 
-                // Delete the token from the users table
-                const { error: userError } = await supabase
-                    .from('users')
-                    .update({ token: null }) // Set token to null in the users table
-                    .eq('id', userId);
+                const response = await fetch(`/api/admin/user-token-link?userId=${userId}&token=${token}`, {
+                    method: 'DELETE',
+                    headers: authHeaders,
+                });
 
-                if (userError) {
-                    throw userError;
+                const responseData = await response.json();
+
+                if (!response.ok) {
+                    throw new Error(responseData.message || `HTTP error ${response.status}`);
                 }
+                
+                showToast(responseData.message || 'Token link removed successfully!');
 
                 // Update the token history locally
                 const updatedHistory = { ...tokenHistory };
@@ -368,106 +400,30 @@ export default function AdminDashboardPage() {
         }
 
         try {
-            // Check if the user already has an active token
-            const { data: existingToken, error: fetchError } = await supabase
-                .from('tokengenerate')
-                .select('token, expiresat')
-                .eq('userid', selectedUserId)
-                .not('token', 'is', null) // Ensure token is not null
-                .neq('token', '') // Ensure token is not an empty string
-                .single();
-
-            if (fetchError && fetchError.code !== 'PGRST116') { // Ignore "No rows found" error
-                throw fetchError;
+            const authHeaders = getAdminApiAuthHeaders();
+            if (!authHeaders['X-Admin-ID']) {
+                showToast("Admin authentication details missing for renewing token.");
+                return;
             }
 
-            if (existingToken) {
-                const expiresAt = new Date(existingToken.expiresat);
-                const currentDate = new Date();
+            const response = await fetch('/api/admin/renew-token', {
+                method: 'POST',
+                headers: authHeaders,
+                body: JSON.stringify({ userId: selectedUserId, duration: selectedDuration }),
+            });
 
-                // Check if the token has expired
-                if (currentDate < expiresAt) {
-                    showToast('User already has an active token. Please delete the existing token before renewing.');
-                    return;
-                } else {
-                    // Delete the expired token from the tokengenerate table
-                    const { error: deleteError } = await supabase
-                        .from('tokengenerate')
-                        .delete()
-                        .eq('token', existingToken.token);
+            const responseData = await response.json();
 
-                    if (deleteError) {
-                        throw deleteError;
-                    }
-                }
+            if (!response.ok) {
+                throw new Error(responseData.message || `HTTP error ${response.status}`);
             }
+            
+            showToast(responseData.message || 'Token renewed successfully!');
+            // Refresh the token user details and token history
+            fetchTokenUserDetails();
+            fetchTokenHistory(); // fetchTokenHistory was already useCallback, so it's fine to call
+            closeRenewModal();
 
-            // Generate a new token
-            const newToken = Array(16)
-                .fill(0)
-                .map(() => {
-                    const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
-                    return chars.charAt(Math.floor(Math.random() * chars.length));
-                })
-                .join('');
-
-            // Calculate expiration date based on duration
-            const createdat = new Date().toISOString();
-            const expiresat = new Date();
-
-            switch (selectedDuration) {
-                case '3month':
-                    expiresat.setMonth(expiresat.getMonth() + 3);
-                    break;
-                case '6month':
-                    expiresat.setMonth(expiresat.getMonth() + 6);
-                    break;
-                case '1year':
-                    expiresat.setFullYear(expiresat.getFullYear() + 1);
-                    break;
-                default:
-                    throw new Error('Invalid duration');
-            }
-
-            // Insert the new token into the tokengenerate table
-            const { data: insertedTokenData, error: insertTokenError } = await supabase
-                .from('tokengenerate')
-                .insert([
-                    {
-                        token: newToken,
-                        createdat: createdat,
-                        expiresat: expiresat.toISOString(),
-                        duration: selectedDuration,
-                        status: 'InUse',
-                        userid: selectedUserId,
-                    },
-                ])
-                .select();
-
-            if (insertTokenError) {
-                throw insertTokenError;
-            }
-
-            // Update the users table with the new token
-            const { data: updatedUserData, error: userUpdateError } = await supabase
-                .from('users')
-                .update({
-                    token: newToken,
-                })
-                .eq('id', selectedUserId)
-                .select();
-
-            if (userUpdateError) {
-                throw userUpdateError;
-            }
-
-            if (insertedTokenData && updatedUserData) {
-                showToast('Token renewed successfully!');
-                // Refresh the token user details and token history
-                fetchTokenUserDetails();
-                fetchTokenHistory();
-                closeRenewModal();
-            }
         } catch (error) {
             let errorMessage = 'Unknown error occurred';
             if (error instanceof Error) {
@@ -483,14 +439,23 @@ export default function AdminDashboardPage() {
     // Fetch token history on component mount
     const fetchTokenHistory = useCallback(async () => {
         try {
-            const { data, error } = await supabase
-                .from('tokengenerate')
-                .select('id, token, status, duration, createdat, expiresat, userid')
-                .order('createdat', { ascending: false });
-
-            if (error) {
-                throw error;
+            const authHeaders = getAdminApiAuthHeaders();
+            if (!authHeaders['X-Admin-ID']) {
+                showToast("Admin authentication details missing for fetching token history.");
+                return;
             }
+
+            const response = await fetch('/api/admin/token-history', {
+                method: 'GET',
+                headers: authHeaders,
+            });
+
+            if (!response.ok) {
+                const errorData = await response.json().catch(() => ({ message: "Failed to fetch token history" }));
+                throw new Error(errorData.message || `HTTP error ${response.status}`);
+            }
+
+            const data: any[] = await response.json(); // Data is an array of token objects
 
             const history: typeof tokenHistory = {
                 '3month': [],
@@ -524,37 +489,27 @@ export default function AdminDashboardPage() {
     // Fetch token user details on component mount
     const fetchTokenUserDetails = async () => {
         try {
-            // Fetch users from the users table
-            const { data: users, error: usersError } = await supabase.from('users').select('id, username, token');
-
-            if (usersError) {
-                throw usersError;
+            const authHeaders = getAdminApiAuthHeaders();
+            if (!authHeaders['X-Admin-ID']) { // Check if essential admin auth headers are missing
+                showToast("Admin authentication details missing. Please log in again.");
+                // Optionally redirect to admin login
+                // router.push('/admin'); 
+                return;
             }
 
-            // Fetch tokens from the tokengenerate table
-            const { data: tokens, error: tokensError } = await supabase
-                .from('tokengenerate')
-                .select('token, duration, createdat, expiresat, userid');
-
-            if (tokensError) {
-                throw tokensError;
-            }
-
-            // Merge users and tokens data
-            const formattedData = users.map((user) => {
-                const tokenData = tokens.find((token) => token.userid === user.id);
-
-                return {
-                    token: tokenData?.token || user.token || 'N/A', // Show 'N/A' if token is empty or null
-                    duration: tokenData?.duration || 'N/A',
-                    createdat: tokenData?.createdat || 'N/A',
-                    expiresat: tokenData?.expiresat || null, // Allow null for expiresat
-                    username: user.username || 'N/A', // Access username
-                    userId: user.id || null, // Access userId
-                };
+            const response = await fetch('/api/admin/token-user-details', {
+                method: 'GET',
+                headers: authHeaders,
             });
 
-            setTokenUsers(formattedData);
+            if (!response.ok) {
+                const errorData = await response.json().catch(() => ({ message: "Failed to fetch token user details" }));
+                throw new Error(errorData.message || `HTTP error ${response.status}`);
+            }
+
+            const data: TokenUser[] = await response.json();
+            setTokenUsers(data);
+
         } catch (error) {
             let errorMessage = 'Unknown error occurred';
             if (error instanceof Error) {

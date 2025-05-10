@@ -37,17 +37,7 @@ export default function SignInPage() {
         });
     };
 
-    const generateSessionToken = (): string => {
-        const buffer = new Uint8Array(32);
-        crypto.getRandomValues(buffer);
-        return Array.from(buffer)
-            .map(b => b.toString(16).padStart(2, '0'))
-            .join('') + Date.now().toString(36);
-    };
-
-    const generateSessionId = (): string => {
-        return crypto.randomUUID();
-    };
+    // generateSessionToken and generateSessionId are now backend responsibilities.
 
     const clearSessionStorage = () => {
         Object.values(STORAGE_KEYS).forEach(key => sessionStorage.removeItem(key));
@@ -68,38 +58,42 @@ export default function SignInPage() {
     });
 
     const handleSessionTermination = async (message: string = "Your session has ended.") => {
-        const { userId } = getSessionData();
-        if (!userId) return;
+        const sessionData = getSessionData(); // Gets { userId, sessionToken, username, sessionId }
+        
+        if (sessionData.userId && sessionData.sessionToken && sessionData.sessionId) {
+            try {
+                const headers: Record<string, string> = {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${sessionData.sessionToken}`,
+                    'X-User-ID': sessionData.userId,
+                    'X-Session-ID': sessionData.sessionId,
+                };
 
-        try {
-            const { error } = await supabase
-                .from("users")
-                .update({
-                    session_token: null,
-                    active_session_id: null,
-                    last_logout: new Date().toISOString()
-                })
-                .eq("id", userId);
-
-            if (error) {
-                showToast("Session could not be terminated properly");
-                return;
-            }
-            
-            await supabase
-                .channel('session_updates')
-                .send({
-                    type: 'broadcast',
-                    event: 'session_terminated',
-                    payload: { userId: parseInt(userId) }
+                const response = await fetch('/api/auth/signout', {
+                    method: 'POST',
+                    headers: headers,
                 });
-        } catch (error) {
-            showToast("Failed to properly end session");
-        } finally {
-            clearSessionStorage();
-            router.push("/");
-            showToast(message);
+
+                if (!response.ok) {
+                    const errorData = await response.json().catch(() => ({ message: "Sign out failed on server." }));
+                    showToast(errorData.message || "Could not sign out session on server.");
+                    // We still proceed to clear local session and redirect.
+                } else {
+                    console.log("Server sign out successful.");
+                }
+            } catch (error) {
+                console.error("Error calling signout API:", error);
+                showToast("Failed to communicate with server for sign out.");
+                // We still proceed to clear local session and redirect.
+            }
+        } else {
+            console.log("No local session data to terminate on server, clearing client.");
         }
+
+        // Always clear local storage and redirect
+        clearSessionStorage();
+        router.push("/"); // Or perhaps to '/signin' if that's the desired redirect on logout
+        showToast(message);
     };
 
     useEffect(() => {
@@ -138,48 +132,7 @@ export default function SignInPage() {
         return true;
     };
 
-    const authenticateUser = async () => {
-        try {
-            const { data: user, error } = await supabase
-                    .from("users")
-                .select("id, username, password, active_session_id, login_count")
-                .eq("username", username)
-                .single();
-
-            if (error) {
-                showToast("Invalid credentials");
-                return null;
-            }
-
-            if (!user) {
-                showToast("Invalid credentials");
-                return null;
-            }
-
-            if (user.password !== password) {
-                showToast("Invalid credentials");
-                return null;
-            }
-            return user;
-        } catch (error) {
-            showToast("An error occurred during authentication");
-            return null;
-        }
-    };
-
-    const updateUserSession = async (userId: string, sessionToken: string, sessionId: string, loginCount: number) => {
-        const { error } = await supabase
-            .from("users")
-            .update({
-                session_token: sessionToken,
-                active_session_id: sessionId,
-                login_count: loginCount + 1,
-                last_login: new Date().toISOString()
-            })
-            .eq("id", userId);
-
-        if (error) throw error;
-    };
+    // authenticateUser and updateUserSession logic moved to /api/auth/signin
 
     const storeSessionData = (sessionToken: string, userId: string, username: string, sessionId: string) => {
         sessionStorage.setItem(STORAGE_KEYS.SESSION_TOKEN, sessionToken);
@@ -198,43 +151,33 @@ export default function SignInPage() {
         
         setIsLoading(true);
         try {
-            if (!validateInputs()) return;
-
-            const user = await authenticateUser();
-            if (!user) return;
-
-            const newSessionToken = generateSessionToken();
-            const newSessionId = generateSessionId();
-
-            if (user.active_session_id) {
-                const { error: terminateError } = await supabase
-                    .from("users")
-                    .update({
-                        session_token: null,
-                        active_session_id: null,
-                        last_logout: new Date().toISOString()
-                    })
-                    .eq("id", user.id);
-
-                if (terminateError) throw new Error("Failed to terminate existing session.");
-
-                await supabase
-                    .channel('session_updates')
-                    .send({
-                        type: 'broadcast',
-                        event: 'session_terminated',
-                        payload: { userId: user.id }
-                    });
+            if (!validateInputs()) {
+                setIsLoading(false);
+                return;
             }
 
-            await updateUserSession(user.id.toString(), newSessionToken, newSessionId, user.login_count);
-            storeSessionData(newSessionToken, user.id.toString(), user.username, newSessionId);
-            showToast("Successfully signed in!", 'success');
-            setTimeout(() => {
-                completeLoginFlow();
-            }, 1000);
+            const response = await fetch('/api/auth/signin', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({ username, password }),
+            });
+
+            const data = await response.json();
+
+            if (response.ok) {
+                storeSessionData(data.sessionToken, data.userId, data.username, data.sessionId);
+                showToast(data.message || "Successfully signed in!", 'success');
+                setTimeout(() => {
+                    completeLoginFlow(); // Navigates to profile page
+                }, 1000);
+            } else {
+                showToast(data.message || "Sign in failed. Please try again.");
+            }
         } catch (error) {
-            showToast("An error occurred during sign in");
+            console.error("Sign in error:", error);
+            showToast("An error occurred during sign in. Please check your connection.");
         } finally {
             setIsLoading(false);
         }
