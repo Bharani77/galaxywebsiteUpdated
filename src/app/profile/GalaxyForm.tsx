@@ -252,24 +252,37 @@ const getApiAuthHeaders = (): Record<string, string> => {
   
         for (const run of sortedRuns) {
          console.log(`Checking run ID: ${run.id}, Created: ${run.created_at}, Status: ${run.status}, URL: ${run.html_url}`);
-          const jobsResponse = await fetch(`/git/galaxyapi/runs?jobsForRunId=${run.id}`, { headers: authHeaders });
-          if (jobsResponse.ok) {
-            const jobsData = await jobsResponse.json();
-            if (jobsData.jobs && jobsData.jobs.length > 0) {
-              console.log(`Jobs for run ${run.id}:`, jobsData.jobs.map((j: any) => j.name));
-              const matchingJob = jobsData.jobs.find((job: any) => job.name === jobNameToFind);
-              if (matchingJob) {
-                console.log(`Found matching job "${matchingJob.name}" in run ${run.id}.`);
-                foundRunId = run.id; 
-                break;
-              }
-            } else {
-              console.log(`No jobs listed for run ${run.id} yet.`);
-            }
-          } else {
-            console.warn(`Failed to fetch jobs for run ${run.id} from backend. Status: ${jobsResponse.status}`);
-          }
-        }
+
+         let jobsData = null;
+         let maxRetries = 3;
+         for (let i = 0; i < maxRetries; i++) {
+           const jobsResponse = await fetch(`/git/galaxyapi/runs?jobsForRunId=${run.id}`, { headers: authHeaders });
+           if (jobsResponse.ok) {
+             jobsData = await jobsResponse.json();
+             if (jobsData?.jobs?.length > 0) {
+               console.log(`Successfully fetched jobs for run ${run.id} on attempt ${i + 1}`);
+               break;
+             } else {
+               console.log(`No jobs listed for run ${run.id} on attempt ${i + 1}. Retrying...`);
+             }
+           } else {
+             console.warn(`Failed to fetch jobs for run ${run.id} from backend on attempt ${i + 1}. Status: ${jobsResponse.status}`);
+           }
+           await new Promise(resolve => setTimeout(resolve, 1000));
+         }
+
+         if (jobsData?.jobs?.length > 0) {
+           console.log(`Jobs for run ${run.id}:`, jobsData.jobs.map((j: any) => j.name));
+           const matchingJob = jobsData.jobs.find((job: any) => job.name === jobNameToFind);
+           if (matchingJob) {
+             console.log(`Found matching job "${matchingJob.name}" in run ${run.id}.`);
+             foundRunId = run.id;
+             break;
+           }
+         } else {
+           console.warn(`Failed to fetch jobs for run ${run.id} after multiple retries.`);
+         }
+       }
 
         if (foundRunId) { 
           if (findRunIdTimer !== null) window.clearInterval(findRunIdTimer);
