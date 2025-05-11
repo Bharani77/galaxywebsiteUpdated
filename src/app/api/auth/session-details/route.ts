@@ -24,7 +24,7 @@ export async function GET(request: NextRequest) {
         .from('tokengenerate') // Your table name for token generation
         .select('expiresat')    // The column name for expiry date
         .eq('userid', session.userId) // Assuming 'userid' is the foreign key
-        .order('created_at', { ascending: false }) // Optional: if multiple tokens, get latest
+        .order('createdat', { ascending: false }) // Corrected column name
         .limit(1)
         .single();
 
