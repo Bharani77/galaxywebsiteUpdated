@@ -89,12 +89,28 @@ export async function performServerSideUndeploy(
   }
 
   // Poll GitHub Actions if activeRunId is provided, regardless of loca.lt outcome
-  let githubPollSuccess = true; // Assume success if no polling is needed or if it succeeds
+  let githubPollSuccess = true; 
   let githubPollMessage = "No GitHub Action polling required or attempted.";
 
   if (activeRunId) {
-    console.log(`[ServerUndeploy] Polling GitHub for cancellation of run ID: ${activeRunId}`);
-    const pollTimeout = 60 * 1000; // 1 minute
+    console.log(`[ServerUndeploy] Active run ID ${activeRunId} found. Attempting to request cancellation via GitHub API.`);
+    const cancelEndpoint = `/repos/${GITHUB_ORG}/${GITHUB_REPO}/actions/runs/${activeRunId}/cancel`;
+    try {
+      const cancelApiResponse = await fetchFromGitHub(cancelEndpoint, { method: 'POST' });
+      if (cancelApiResponse.ok || cancelApiResponse.status === 202) { // 202 Accepted is success for cancel
+        console.log(`[ServerUndeploy] GitHub API request to cancel run ${activeRunId} sent successfully (Status: ${cancelApiResponse.status}).`);
+      } else {
+        // Log error but proceed to polling, as run might already be stopping or cancelled.
+        const errorText = await cancelApiResponse.text().catch(() => `Status ${cancelApiResponse.status}`);
+        console.warn(`[ServerUndeploy] GitHub API request to cancel run ${activeRunId} failed or was not 200/202. Status: ${cancelApiResponse.status}, Response: ${errorText}. Will proceed to poll status.`);
+        // Do not set githubPollSuccess = false here yet, polling will determine final state.
+      }
+    } catch (cancelError: any) {
+      console.error(`[ServerUndeploy] Exception calling GitHub API to cancel run ${activeRunId}: ${cancelError.message}. Will proceed to poll status.`);
+    }
+
+    console.log(`[ServerUndeploy] Now polling GitHub for actual cancellation of run ID: ${activeRunId}`);
+    const pollTimeout = 55000; // 55 seconds, to be less than typical 60s serverless timeout
     const pollInterval = 5 * 1000; // 5 seconds
     let pollStartTime = Date.now();
     let runCancelled = false;
