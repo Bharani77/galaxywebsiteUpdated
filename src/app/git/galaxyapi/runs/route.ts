@@ -111,6 +111,8 @@ export async function GET(request: NextRequest) {
       run_number: data.run_number,
     }) : null;
   } else if (jobsForRunIdParam) {
+    // Introduce a delay to allow GitHub to populate the jobs
+    await new Promise(resolve => setTimeout(resolve, 5000)); // 5 seconds
     urlToFetch = `https://api.github.com/repos/${ORG}/${REPO}/actions/runs/${jobsForRunIdParam}/jobs`;
     transformFunction = (data: any): { jobs: SimpleJob[] } | null => data && Array.isArray(data.jobs) ? ({
       jobs: data.jobs.map((job: any) => ({
