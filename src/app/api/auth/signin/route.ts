@@ -66,10 +66,12 @@ export async function POST(request: NextRequest) {
     if (user.active_session_id) {
       console.log(`[SignIn] User ${user.username} (ID: ${user.id}) is signing in, potentially terminating existing session ${user.active_session_id}.`);
 
-      // Check if there's an active deployment (especially a GitHub run) for this user that needs to be undeployed
-      if (user.deploy_timestamp && user.active_run_id) { 
-        // Log details including active_form_number even if it's null, for complete context
-        console.log(`[SignIn] User ${user.username} has active GitHub deployment. DB values - Timestamp: ${user.deploy_timestamp}, Form: ${user.active_form_number}, RunID: ${user.active_run_id}. Attempting server-side undeploy.`);
+      // Check if there's any active deployment (GitHub run OR a specific loca.lt form)
+      const hasActiveGitHubRun = user.deploy_timestamp && user.active_run_id;
+      const hasActiveLocaltForm = user.deploy_timestamp && user.active_form_number && user.active_form_number > 0;
+
+      if (hasActiveGitHubRun || hasActiveLocaltForm) { 
+        console.log(`[SignIn] User ${user.username} has an active deployment. GitHub Run: ${user.active_run_id || 'N/A'}, Loca.lt Form: ${user.active_form_number || 'N/A'}. Timestamp: ${user.deploy_timestamp}. Attempting server-side undeploy.`);
         
         // Pass supabaseService to performServerSideUndeploy if it's designed to accept it,
         // or ensure it creates its own client if not.
@@ -79,20 +81,19 @@ export async function POST(request: NextRequest) {
           user.username, // Plain username for logical username generation
           user.deploy_timestamp,
           user.active_form_number,
-          user.active_run_id, // Pass active_run_id
+          user.active_run_id,     // Will be used for GitHub polling
           supabaseService // Pass the existing service client
         );
 
         if (!undeployResult.success) {
           console.error(`[SignIn] Server-side undeploy failed for user ${user.username} during new sign-in. Reason: ${undeployResult.message}`);
-          // Return an error to Browser B, making it wait/informing the user.
           return NextResponse.json({ 
             message: `Sign-in blocked: Failed to undeploy previous active session. ${undeployResult.message} Please try again or contact support.` 
-          }, { status: 409 }); // 409 Conflict might be appropriate
+          }, { status: 409 }); 
         }
-        console.log(`[SignIn] Server-side undeploy successful for user ${user.username}.`);
+        console.log(`[SignIn] Server-side undeploy process completed for user ${user.username}. Result: ${undeployResult.message}`);
       } else {
-        console.log(`[SignIn] No active deployment found for user ${user.username} to undeploy during new sign-in.`);
+        console.log(`[SignIn] No active deployment (neither GitHub run nor loca.lt form) found for user ${user.username} to undeploy during new sign-in.`);
       }
 
       // Proceed with broadcasting session termination for other tabs/devices of this user
