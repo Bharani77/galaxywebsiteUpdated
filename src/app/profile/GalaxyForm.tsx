@@ -217,22 +217,43 @@ const getApiAuthHeaders = (): Record<string, string> => {
 
     const handleStaleSession = async () => {
       setToastMessage('New session is active. This session has been logged out.');
+      
+      // Attempt to clear server-side session cookies first
+      try {
+        console.log('Stale session: Calling /api/auth/signout to clear cookies.');
+        const signoutResponse = await fetch('/api/auth/signout', { 
+          method: 'POST',
+          headers: getApiAuthHeaders(), // Cookies are auto-sent by browser
+        });
+        if (!signoutResponse.ok) {
+          console.error('Call to /api/auth/signout failed during stale session handling:', signoutResponse.statusText);
+        } else {
+          console.log('/api/auth/signout call successful during stale session handling.');
+        }
+      } catch (error) {
+        console.error('Error calling /api/auth/signout during stale session handling:', error);
+      }
+
       if (isDeployed) { // Check current deployment state
         console.log('Stale session: Attempting undeploy...');
-        // Note: handleUndeploy makes API calls which might fail with 401.
-        // It should ideally handle this gracefully or we need a "force undeploy" via beacon.
-        // For now, let it attempt.
+        // Note: handleUndeploy makes API calls which might fail with 401 now that cookies are cleared.
+        // The beacon on beforeunload is the more reliable undeploy for this scenario.
+        // Consider if handleUndeploy should even be called here, or if we rely on beacon.
+        // For now, keeping it, but it might not fully succeed.
         await handleUndeploy(); 
       }
+
       // Clear local state and redirect
       sessionStorage.removeItem('username');
-      // Potentially clear other session-related items
-      // sessionStorage.clear(); 
       setUsername(null);
       setDisplayedUsername(null);
       setIsDeployed(false);
-      // router.push('/signin'); // Redirect after a small delay for toast
-      setTimeout(() => router.push('/signin'), 3000);
+      setCurrentUserId(null); // Clear current user ID
+      clearAllPollingTimers(); // Ensure all polling stops
+      setIsPollingStatus(false);
+      
+      // Redirect after a small delay for toast and signout API to complete
+      setTimeout(() => router.push('/signin'), 3000); 
     };
 
     const fetchSessionDetails = async () => {
