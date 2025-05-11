@@ -50,7 +50,6 @@ async function fetchFromGitHub(url: string, options: RequestInit = {}) {
   // For other successful GETs (typically 200 with data)
   try {
     const rawData = await response.json();
-    console.log("Raw data received from GitHub API:", rawData); // Add this line
     return NextResponse.json({ rawData, status: response.status, ok: true }, { status: response.status });
   } catch (e: any) {
     // If response.json() fails (e.g. empty body but status 200, or malformed JSON from GitHub)
@@ -113,42 +112,31 @@ export async function GET(request: NextRequest) {
     }) : null;
   } else if (jobsForRunIdParam) {
     urlToFetch = `https://api.github.com/repos/${ORG}/${REPO}/actions/runs/${jobsForRunIdParam}/jobs`;
-   transformFunction = (data: any): { jobs: SimpleJob[] } | null => {
-     if (data && typeof data === 'object' && 'error' in data) {
-       console.error("Error fetching jobs:", data.error);
-       return { jobs: [] };
-     }
-     return data && Array.isArray(data.jobs) ? ({
-       jobs: data.jobs.map((job: any) => ({
-         id: job.id,
-         name: job.name,
-         status: job.status,
-         conclusion: job.conclusion,
-       })),
-     }) : { jobs: [] };
-   };
+    transformFunction = (data: any): { jobs: SimpleJob[] } | null => data && Array.isArray(data.jobs) ? ({
+      jobs: data.jobs.map((job: any) => ({
+        id: job.id,
+        name: job.name,
+        status: job.status,
+        conclusion: job.conclusion,
+      })),
+    }) : { jobs: [] };
   } else {
     urlToFetch = `https://api.github.com/repos/${ORG}/${REPO}/actions/workflows/${WORKFLOW_FILE_NAME}/runs?per_page=${perPage}`;
     if (workflowStatusFilter) {
       urlToFetch += `&status=${workflowStatusFilter}`;
-     }
-     transformFunction = (data: any): { workflow_runs: SimpleRun[] } | null => {
-     if (!data || !Array.isArray(data.workflow_runs)) {
-       return { workflow_runs: [] };
-     }
-     return {
-       workflow_runs: data.workflow_runs.map((run: any) => ({
-         id: run.id,
-         name: run.name,
-         status: run.status,
-         conclusion: run.conclusion,
+    }
+    transformFunction = (data: any): { workflow_runs: SimpleRun[] } | null => data && Array.isArray(data.workflow_runs) ? ({
+      workflow_runs: data.workflow_runs.map((run: any) => ({
+        id: run.id,
+        name: run.name,
+        status: run.status,
+        conclusion: run.conclusion,
         created_at: run.created_at,
         updated_at: run.updated_at,
         html_url: run.html_url,
         run_number: run.run_number,
-       })),
-    };
-    };
+      })),
+    }) : { workflow_runs: [] };
   }
 
   const result = await fetchFromGitHub(urlToFetch);
