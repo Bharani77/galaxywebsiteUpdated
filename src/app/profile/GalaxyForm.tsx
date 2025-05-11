@@ -112,19 +112,20 @@ const getApiAuthHeaders = (): Record<string, string> => {
       // Fetching fewer runs (e.g., 5 instead of 10) to speed up initial check for common cases.
       const runsResponse = await fetch(`/git/galaxyapi/runs?status=in_progress&per_page=5`, { headers: authHeaders });
       if (runsResponse.ok) {
-        const runsData = await runsResponse.json();
-        const workflowRuns = runsData.workflow_runs || runsData;
-        if (!Array.isArray(workflowRuns)) {
-          console.error("Invalid runs data received from backend:", workflowRuns);
-          setIsDeployed(false);
+       const runsData = await runsResponse.json();
+       const workflowRuns = runsData.rawData?.workflow_runs || runsData;
+       if (!Array.isArray(workflowRuns)) {
+         console.error("Invalid runs data received from backend:", workflowRuns);
+         setIsDeployed(false);
           setShowDeployPopup(true);
           setDeploymentStatus('Error fetching deployment status.');
           return;
         }
         const sortedRuns = workflowRuns.sort((a: any, b: any) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+        console.log("Sorted runs (checkInitialDeploymentStatus):", sortedRuns.slice(0, 3).map((run: any) => ({ id: run.id, created_at: run.created_at })));
   
         for (const run of sortedRuns) {
-          const jobsResponse = await fetch(`/git/galaxyapi/runs?jobsForRunId=${run.id}`, { headers: authHeaders });
+         const jobsResponse = await fetch(`/git/galaxyapi/runs?jobsForRunId=${run.id}`, { headers: authHeaders });
           if (jobsResponse.ok) {
             const jobsData = await jobsResponse.json();
             if (jobsData.jobs && jobsData.jobs.find((job: any) => job.name === jobNameToFind)) {
@@ -240,34 +241,48 @@ const getApiAuthHeaders = (): Record<string, string> => {
           throw new Error(`Failed to fetch workflow runs from backend: ${runsResponse.status} ${errorData.message || errorText}`);
         }
         const runsData = await runsResponse.json();
-        const workflowRuns = runsData.workflow_runs || runsData; 
+        const workflowRuns = runsData.rawData?.workflow_runs || runsData;
          if (!Array.isArray(workflowRuns)) {
           console.error("Invalid runs data received from backend:", workflowRuns);
           throw new Error('Invalid runs data from backend.');
         }
         const sortedRuns = workflowRuns.sort((a: any, b: any) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+        console.log("Sorted runs (startDeploymentCheck):", sortedRuns.slice(0, 3).map((run: any) => ({ id: run.id, created_at: run.created_at })));
         console.log(`Fetched ${sortedRuns.length} runs in current attempt from backend.`);
-
+  
         for (const run of sortedRuns) {
-          console.log(`Checking run ID: ${run.id}, Created: ${run.created_at}, Status: ${run.status}, URL: ${run.html_url}`);
-          const jobsResponse = await fetch(`/git/galaxyapi/runs?jobsForRunId=${run.id}`, { headers: authHeaders });
-          if (jobsResponse.ok) {
-            const jobsData = await jobsResponse.json();
-            if (jobsData.jobs && jobsData.jobs.length > 0) {
-              console.log(`Jobs for run ${run.id}:`, jobsData.jobs.map((j: any) => j.name));
-              const matchingJob = jobsData.jobs.find((job: any) => job.name === jobNameToFind);
-              if (matchingJob) {
-                console.log(`Found matching job "${matchingJob.name}" in run ${run.id}.`);
-                foundRunId = run.id; 
-                break;
-              }
-            } else {
-              console.log(`No jobs listed for run ${run.id} yet.`);
-            }
-          } else {
-            console.warn(`Failed to fetch jobs for run ${run.id} from backend. Status: ${jobsResponse.status}`);
-          }
-        }
+         console.log(`Checking run ID: ${run.id}, Created: ${run.created_at}, Status: ${run.status}, URL: ${run.html_url}`);
+
+         let jobsData = null;
+         let maxRetries = 3;
+         for (let i = 0; i < maxRetries; i++) {
+           const jobsResponse = await fetch(`/git/galaxyapi/runs?jobsForRunId=${run.id}`, { headers: authHeaders });
+           if (jobsResponse.ok) {
+             jobsData = await jobsResponse.json();
+             if (jobsData?.jobs?.length > 0) {
+               console.log(`Successfully fetched jobs for run ${run.id} on attempt ${i + 1}`);
+               break;
+             } else {
+               console.log(`No jobs listed for run ${run.id} on attempt ${i + 1}. Retrying...`);
+             }
+           } else {
+             console.warn(`Failed to fetch jobs for run ${run.id} from backend on attempt ${i + 1}. Status: ${jobsResponse.status}`);
+           }
+           await new Promise(resolve => setTimeout(resolve, 1000));
+         }
+
+         if (jobsData?.jobs?.length > 0) {
+           console.log(`Jobs for run ${run.id}:`, jobsData.jobs.map((j: any) => j.name));
+           const matchingJob = jobsData.jobs.find((job: any) => job.name === jobNameToFind);
+           if (matchingJob) {
+             console.log(`Found matching job "${matchingJob.name}" in run ${run.id}.`);
+             foundRunId = run.id;
+             break;
+           }
+         } else {
+           console.warn(`Failed to fetch jobs for run ${run.id} after multiple retries.`);
+         }
+       }
 
         if (foundRunId) { 
           if (findRunIdTimer !== null) window.clearInterval(findRunIdTimer);
@@ -487,10 +502,10 @@ const getApiAuthHeaders = (): Record<string, string> => {
       }
       
       const runsData = await runsResponse.json();
-      const workflowRuns = runsData.workflow_runs || runsData; 
+      const workflowRuns = runsData.rawData?.workflow_runs || runsData;
       if (!Array.isArray(workflowRuns)) {
-        console.error("Invalid runs data received from backend for undeploy:", workflowRuns);
-        throw new Error('Invalid runs data from backend for undeploy.');
+       console.error("Invalid runs data received from backend for undeploy:", workflowRuns);
+       throw new Error('Invalid runs data from backend for undeploy.');
       }
       const sortedRuns = workflowRuns.sort((a: any, b: any) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
       console.log(`handleUndeploy: Found ${sortedRuns.length} in-progress runs from backend.`);
