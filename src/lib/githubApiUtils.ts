@@ -13,7 +13,8 @@ export const GITHUB_API_BASE_URL = 'https://api.github.com';
 
 export const getGitHubApiHeaders = (): Record<string, string> => {
   if (!GITHUB_TOKEN) {
-    throw new Error('GitHub token not configured on the server.');
+    // This message will be part of the error returned to client if this throw is caught by fetchFromGitHub
+    throw new Error('Automation service token not configured on the server.');
   }
   return {
     'Accept': 'application/vnd.github+json',
@@ -43,14 +44,16 @@ export async function fetchFromGitHub(
     console.error(`GitHub API error: ${response.status} for URL ${url}`, errorData.substring(0, 500)); // Log snippet
     try {
       const jsonData = JSON.parse(errorData);
-      return NextResponse.json({ message: `GitHub API Error: ${response.status}`, error: jsonData }, { status: response.status });
+      // Generic client message
+      return NextResponse.json({ message: `Automation service API Error: ${response.status}`, error: jsonData }, { status: response.status });
     } catch (e) {
-      return NextResponse.json({ message: `GitHub API Error: ${response.status}`, error: errorData }, { status: response.status });
+      // Generic client message
+      return NextResponse.json({ message: `Automation service API Error: ${response.status}`, error: errorData }, { status: response.status });
     }
   }
 
   if (options.method === 'POST' && response.status === 202) { // e.g. cancel run
-    return NextResponse.json({ message: 'Request accepted by GitHub.' }, { status: 202 });
+    return NextResponse.json({ message: 'Request accepted by the automation service.' }, { status: 202 });
   }
   if (options.method === 'POST' && response.status === 204) { // e.g. workflow dispatch
     return NextResponse.json({ message: 'Workflow dispatched successfully.' }, { status: 204 });
@@ -65,9 +68,10 @@ export async function fetchFromGitHub(
     // Always return a NextResponse
     return NextResponse.json(rawData, { status: response.status });
   } catch (e: any) {
-    console.error(`Failed to parse JSON response from GitHub for URL ${url}. Status: ${response.status}`, e.message);
+    console.error(`Failed to parse JSON response from the automation service for URL ${url}. Status: ${response.status}`, e.message);
     // Always return a NextResponse for errors too
-    return NextResponse.json({ message: 'Failed to parse response from GitHub.' }, { status: 502 });
+    // Generic client message
+    return NextResponse.json({ message: 'Failed to parse response from the automation service.' }, { status: 502 });
   }
 }
 
