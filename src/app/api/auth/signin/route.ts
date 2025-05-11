@@ -14,11 +14,8 @@ if (!supabaseUrl) {
 // Module-level Supabase client removed, will be created with service role key in handler.
 
 const generateSessionToken = (): string => {
-  const buffer = new Uint8Array(32);
-  crypto.getRandomValues(buffer); // Assuming this is intended and works in the environment, or should be crypto.randomBytes() for Node.js
-  return Array.from(buffer)
-    .map(b => b.toString(16).padStart(2, '0'))
-    .join('') + Date.now().toString(36);
+  // Use crypto.randomBytes for Node.js environment, then convert to hex string
+  return crypto.randomBytes(32).toString('hex') + Date.now().toString(36);
 };
 
 const generateSessionId = (): string => {
