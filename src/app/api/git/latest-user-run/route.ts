@@ -12,13 +12,13 @@ const ORG = process.env.NEXT_PUBLIC_GITHUB_ORG || 'GalaxyKickLock';
 const REPO = process.env.NEXT_PUBLIC_GITHUB_REPO || 'GalaxyKickPipeline';
 const WORKFLOW_FILE_NAME = process.env.NEXT_PUBLIC_GITHUB_WORKFLOW_FILE || 'blank.yml';
 
-interface LatestUserRunResponse {
-  runId: number;
+interface ClientSafeRunResponse { // Renamed for clarity
+  runId: number; // Or consider if even runId is needed by client
   status: string | null;
   conclusion: string | null;
-  createdAt: string;
-  htmlUrl: string;
-  jobName: string;
+  // createdAt: string; // Consider if client needs this
+  // htmlUrl: string; // Explicitly removing this
+  jobName: string; // Or just a success/failure indicator?
 }
 
 export async function GET(request: NextRequest) {
@@ -83,21 +83,22 @@ export async function GET(request: NextRequest) {
       if (jobsData.jobs && jobsData.jobs.length > 0) {
         const matchingJob = jobsData.jobs.find(job => job.name === targetJobName);
         if (matchingJob) {
-          console.log(`Found matching job in run ${run.id}. Job ID: ${matchingJob.id}, Job Name: ${matchingJob.name}`);
-          const responsePayload: LatestUserRunResponse = {
-            runId: run.id,
+          console.log(`Found matching job in run ${run.id}. Job ID: ${matchingJob.id}, Job Name: ${matchingJob.name}, Status: ${run.status}, Conclusion: ${run.conclusion}`);
+          // Construct a client-safe response, excluding sensitive URLs or excessive details
+          const clientResponsePayload: ClientSafeRunResponse = {
+            runId: run.id, // Client might need this to track a specific run it initiated or is interested in
             status: run.status,
             conclusion: run.conclusion,
-            createdAt: run.created_at,
-            htmlUrl: run.html_url,
-            jobName: matchingJob.name,
+            // createdAt: run.created_at, // Decide if client needs this
+            jobName: matchingJob.name, // Client might need to confirm it's the right job
           };
-          return NextResponse.json(responsePayload, { status: 200 });
+          return NextResponse.json(clientResponsePayload, { status: 200 });
         }
       }
     }
 
     // If loop completes, no matching run was found
+    console.log(`No runs found with a job named "${targetJobName}" after checking all runs.`);
     return NextResponse.json({ message: `No runs found with a job named "${targetJobName}".` }, { status: 404 });
 
   } catch (error: any) {
