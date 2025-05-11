@@ -12,11 +12,13 @@ const ORG = process.env.NEXT_PUBLIC_GITHUB_ORG || 'GalaxyKickLock';
 const REPO = process.env.NEXT_PUBLIC_GITHUB_REPO || 'GalaxyKickPipeline';
 const WORKFLOW_FILE_NAME = process.env.NEXT_PUBLIC_GITHUB_WORKFLOW_FILE || 'blank.yml';
 
-interface ClientSafeRunResponse {
-  runId: number; 
+interface LatestUserRunResponse {
+  runId: number;
   status: string | null;
   conclusion: string | null;
-  // jobName: string; // Removing this as per request
+  createdAt: string;
+  htmlUrl: string;
+  jobName: string;
 }
 
 export async function GET(request: NextRequest) {
@@ -81,21 +83,21 @@ export async function GET(request: NextRequest) {
       if (jobsData.jobs && jobsData.jobs.length > 0) {
         const matchingJob = jobsData.jobs.find(job => job.name === targetJobName);
         if (matchingJob) {
-          console.log(`Found matching job in run ${run.id}. Job ID: ${matchingJob.id}, Job Name: ${matchingJob.name}, Status: ${run.status}, Conclusion: ${run.conclusion}`);
-          // Construct a client-safe response, excluding sensitive URLs or excessive details
-          const clientResponsePayload: ClientSafeRunResponse = {
-            runId: run.id, 
+          console.log(`Found matching job in run ${run.id}. Job ID: ${matchingJob.id}, Job Name: ${matchingJob.name}`);
+          const responsePayload: LatestUserRunResponse = {
+            runId: run.id,
             status: run.status,
             conclusion: run.conclusion,
-            // jobName: matchingJob.name, // Removed
+            createdAt: run.created_at,
+            htmlUrl: run.html_url,
+            jobName: matchingJob.name,
           };
-          return NextResponse.json(clientResponsePayload, { status: 200 });
+          return NextResponse.json(responsePayload, { status: 200 });
         }
       }
     }
 
     // If loop completes, no matching run was found
-    console.log(`No runs found with a job named "${targetJobName}" after checking all runs.`);
     return NextResponse.json({ message: `No runs found with a job named "${targetJobName}".` }, { status: 404 });
 
   } catch (error: any) {

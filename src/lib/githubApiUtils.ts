@@ -39,20 +39,14 @@ export async function fetchFromGitHub(
   const response = await fetch(url, { ...options, headers: { ...headers, ...options.headers } });
 
   if (!response.ok) {
-    const errorData = await response.text(); // Get the full error text for server-side logging
-    console.error(`GitHub API error: ${response.status} for URL ${url}. Response:`, errorData.substring(0, 1000)); // Log more for debugging
-
-    // Return a generic error message to the client, do not expose raw GitHub error.
-    // The status code from GitHub (response.status) can still be useful to return.
-    let clientMessage = `An error occurred while communicating with GitHub (Status: ${response.status}).`;
-    if (response.status === 401 || response.status === 403) {
-      clientMessage = 'GitHub authentication failed or access denied. Please check server configuration.';
-    } else if (response.status === 404) {
-      clientMessage = 'The requested GitHub resource was not found.';
+    const errorData = await response.text();
+    console.error(`GitHub API error: ${response.status} for URL ${url}`, errorData.substring(0, 500)); // Log snippet
+    try {
+      const jsonData = JSON.parse(errorData);
+      return NextResponse.json({ message: `GitHub API Error: ${response.status}`, error: jsonData }, { status: response.status });
+    } catch (e) {
+      return NextResponse.json({ message: `GitHub API Error: ${response.status}`, error: errorData }, { status: response.status });
     }
-    // For other errors, the generic message with status is usually sufficient.
-    
-    return NextResponse.json({ message: clientMessage }, { status: response.status });
   }
 
   if (options.method === 'POST' && response.status === 202) { // e.g. cancel run

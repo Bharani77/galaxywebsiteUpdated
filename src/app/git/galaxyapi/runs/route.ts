@@ -13,16 +13,16 @@ const ORG = process.env.NEXT_PUBLIC_GITHUB_ORG || 'GalaxyKickLock';
 const REPO = process.env.NEXT_PUBLIC_GITHUB_REPO || 'GalaxyKickPipeline';
 const WORKFLOW_FILE_NAME = process.env.NEXT_PUBLIC_GITHUB_WORKFLOW_FILE || 'blank.yml';
 
-// Simplified types for frontend responses
-interface ClientSafeRunDetails { // Renamed for clarity
+// Simplified types for frontend responses, can be adjusted if GitHubRun/Job are directly usable
+interface SimpleRun {
   id: number;
+  name: string | null;
   status: string | null;
   conclusion: string | null;
+  created_at: string;
+  updated_at: string;
+  html_url: string;
   run_number: number;
-  // name: string | null; // Removing name (often workflow name or commit message)
-  // created_at: string; // Removing timestamp
-  // updated_at: string; // Removing timestamp
-  // html_url: string; // Explicitly removing GitHub URL
 }
 
 interface SimpleJob {
@@ -56,52 +56,46 @@ export async function GET(request: NextRequest) {
 
   if (runIdParam) {
     endpoint = `/repos/${ORG}/${REPO}/actions/runs/${runIdParam}`;
-    transformFunction = (ghRun: GitHubRun): ClientSafeRunDetails | null => ghRun ? ({
+    transformFunction = (ghRun: GitHubRun): SimpleRun | null => ghRun ? ({
       id: ghRun.id,
+      name: ghRun.name,
       status: ghRun.status,
       conclusion: ghRun.conclusion,
+      created_at: ghRun.created_at,
+      updated_at: ghRun.updated_at,
+      html_url: ghRun.html_url,
       run_number: ghRun.run_number,
-      // name: ghRun.name, // Removed
-      // created_at: ghRun.created_at, // Removed
-      // updated_at: ghRun.updated_at, // Removed
-      // html_url: ghRun.html_url, // Removed
     }) : null;
   } else if (jobsForRunIdParam) {
     // The delay is still relevant if GitHub needs time to populate jobs after a run starts
     await new Promise(resolve => setTimeout(resolve, 5000)); // 5 seconds delay
     endpoint = `/repos/${ORG}/${REPO}/actions/runs/${jobsForRunIdParam}/jobs`;
     transformFunction = (ghJobsResponse: GitHubRunJobsResponse): { jobs: SimpleJob[] } => ({
-      // Review SimpleJob: currently includes 'name'. If this is sensitive, it should be removed.
-      // For now, assuming job name within a run might be okay for an authenticated user if they know the run ID.
-      // If job.name is also too sensitive (e.g. "Run for UserX"), then SimpleJob needs adjustment.
       jobs: ghJobsResponse && Array.isArray(ghJobsResponse.jobs) 
         ? ghJobsResponse.jobs.map((job: GitHubJob) => ({
-            id: job.id, // Client might need job ID if it interacts with jobs
-            name: job.name, // Potentially sensitive if it reveals user-specific info
+            id: job.id,
+            name: job.name,
             status: job.status,
             conclusion: job.conclusion,
           }))
         : [],
     });
   } else {
-    // This case lists multiple workflow runs.
     endpoint = `/repos/${ORG}/${REPO}/actions/workflows/${WORKFLOW_FILE_NAME}/runs?per_page=${perPage}`;
     if (workflowStatusFilter) {
       endpoint += `&status=${workflowStatusFilter}`;
     }
-    // This transformFunction maps to SimpleRun, which we are about to redefine as ClientSafeRunDetails.
-    // So, the list of runs will also be sanitized.
-    transformFunction = (ghRunsResponse: GitHubWorkflowRunsResponse): { workflow_runs: ClientSafeRunDetails[] } => ({
+    transformFunction = (ghRunsResponse: GitHubWorkflowRunsResponse): { workflow_runs: SimpleRun[] } => ({
       workflow_runs: ghRunsResponse && Array.isArray(ghRunsResponse.workflow_runs)
         ? ghRunsResponse.workflow_runs.map((run: GitHubRun) => ({
             id: run.id,
+            name: run.name,
             status: run.status,
             conclusion: run.conclusion,
+            created_at: run.created_at,
+            updated_at: run.updated_at,
+            html_url: run.html_url,
             run_number: run.run_number,
-            // name: run.name, // Removed
-            // created_at: run.created_at, // Removed
-            // updated_at: run.updated_at, // Removed
-            // html_url: run.html_url, // Removed
           }))
         : [],
     });
