@@ -141,9 +141,37 @@ export async function GET(request: NextRequest) {
     }) : { workflow_runs: [] };
   }
 
-  const result = await fetchFromGitHub(urlToFetch);
+  let result: any;
+  let attempts = 0;
+  const maxAttempts = 5;
+  const retryInterval = 25000; // 25 seconds
 
-  // If fetchFromGitHub returned a NextResponse, it's an error response 
+  do {
+    result = await fetchFromGitHub(urlToFetch);
+    attempts++;
+
+    // If fetchFromGitHub returned a NextResponse, it's an error response
+    // or a specific non-GET success response that it decided to handle fully.
+    if (result instanceof NextResponse) {
+      // If it's the last attempt, return the error response
+      if (attempts >= maxAttempts) {
+        return result;
+      }
+      // Wait before retrying
+      await new Promise(resolve => setTimeout(resolve, retryInterval));
+      continue; // Skip further processing and retry
+    }
+
+    // Break the loop if the result is successful
+    break;
+  } while (attempts < maxAttempts);
+
+  // If all attempts failed, return an error
+  if (attempts >= maxAttempts && result instanceof NextResponse) {
+    return result;
+  }
+
+  // If fetchFromGitHub returned a NextResponse, it's an error response
   // or a specific non-GET success response that it decided to handle fully.
   if (result instanceof NextResponse) {
     return result;
