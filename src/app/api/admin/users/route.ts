@@ -2,18 +2,21 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
 import { validateAdminSession } from '@/lib/adminAuth';
 
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
-const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL; // URL can often be public
+const supabaseServiceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY; // Service role key for admin operations
 
-if (!supabaseUrl || !supabaseAnonKey) {
-  console.error('Supabase URL or Anon Key is missing for /api/admin/users. Check environment variables.');
+if (!supabaseUrl || !supabaseServiceRoleKey) {
+  console.error('Supabase URL or Service Role Key is missing for /api/admin/users. Check environment variables.');
+  // Do not initialize supabase client here if config is missing, handle in function
 }
-const supabase: SupabaseClient = createClient(supabaseUrl || '', supabaseAnonKey || '');
+// Initialize Supabase client per request or globally if appropriate, ensuring service key is used.
+// For this route, it's safer to initialize within the handler to ensure service key is checked.
 
 export async function DELETE(request: NextRequest) {
-  if (!supabaseUrl || !supabaseAnonKey) {
-    return NextResponse.json({ message: 'Server configuration error: Supabase not configured.' }, { status: 500 });
+  if (!supabaseUrl || !supabaseServiceRoleKey) {
+    return NextResponse.json({ message: 'Server configuration error: Supabase (service role) not configured.' }, { status: 500 });
   }
+  const supabase: SupabaseClient = createClient(supabaseUrl, supabaseServiceRoleKey);
 
   const adminSession = await validateAdminSession(request);
   if (!adminSession) {

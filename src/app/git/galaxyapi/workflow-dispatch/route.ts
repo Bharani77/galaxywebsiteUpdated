@@ -19,11 +19,13 @@ export async function POST(request: NextRequest) {
   }
 
   try {
-    const body = await request.json();
-    const { username } = body;
+    const body = await request.json(); 
+    const workflowInputUsername = body.username; // Use username from request body, sent by GalaxyForm
 
-    if (!username) {
-      return NextResponse.json({ message: 'Username is required.' }, { status: 400 });
+    if (!workflowInputUsername) {
+      // This case means GalaxyForm didn't send it, or it was empty.
+      console.error('Username not provided in request body for workflow dispatch.');
+      return NextResponse.json({ message: 'Username is required in request body.' }, { status: 400 });
     }
 
     const apiHeaders = {
@@ -38,7 +40,7 @@ export async function POST(request: NextRequest) {
     const githubResponse = await fetch(dispatchUrl, {
       method: 'POST',
       headers: apiHeaders,
-      body: JSON.stringify({ ref: 'main', inputs: { username } }),
+      body: JSON.stringify({ ref: 'main', inputs: { username: workflowInputUsername } }),
     });
 
     if (githubResponse.status === 204) {

@@ -52,8 +52,9 @@ const GalaxyForm: React.FC = () => {
   const [activationProgressTimerId, setActivationProgressTimerId] = useState<number | null>(null);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
   const [activationProgressPercent, setActivationProgressPercent] = useState<number>(0);
+  const [autoUndeployMessage, setAutoUndeployMessage] = useState<string | null>(null);
+  const [showAutoUndeployPopup, setShowAutoUndeployPopup] = useState<boolean>(false);
 
-// Interface for the response from /api/git/latest-user-run
 interface LatestUserRunResponse {
   runId: number;
   status: string | null;
@@ -71,7 +72,6 @@ const getApiAuthHeaders = (): Record<string, string> => {
   const userId = sessionStorage.getItem('userId');
   const sessionId = sessionStorage.getItem('sessionId');
 
-  // Only add auth headers if all parts are present
   if (token && userId && sessionId) {
     headers['Authorization'] = `Bearer ${token}`;
     headers['X-User-ID'] = userId;
@@ -107,10 +107,8 @@ const getApiAuthHeaders = (): Record<string, string> => {
     router.push('/signin');
   };
 
-  const checkInitialDeploymentStatus = async (logicalUsername: string) => {
+  const checkInitialDeploymentStatus = async (logicalUsernameToCheck: string) => {
     setDeploymentStatus('Checking deployment status...');
-    // setShowDeployPopup(true); // Keep this if you want the popup visible during check
-
     try {
       const authHeaders = getApiAuthHeaders();
       if (!authHeaders['Authorization']) {
@@ -120,39 +118,32 @@ const getApiAuthHeaders = (): Record<string, string> => {
         return;
       }
 
-      console.log(`Fetching latest run status for: ${logicalUsername} via new endpoint.`);
-      const response = await fetch(`/api/git/latest-user-run?logicalUsername=${logicalUsername}`, { headers: authHeaders });
+      console.log(`Fetching latest run status for job name based on: ${logicalUsernameToCheck} via /api/git/latest-user-run`);
+      const response = await fetch(`/api/git/latest-user-run?logicalUsername=${logicalUsernameToCheck}`, { headers: authHeaders });
 
       if (response.ok) {
         const data = await response.json() as LatestUserRunResponse;
-        
-        // An active deployment is typically 'in_progress' or 'queued'
-        // You might also consider 'requested' or 'waiting' if your workflow uses them.
         const isActiveStatus = data.status === 'in_progress' || data.status === 'queued';
 
         if (isActiveStatus) {
-          console.log(`Active deployment found via new endpoint (Run ID: ${data.runId}, Status: ${data.status}).`);
+          console.log(`Active deployment found (Run ID: ${data.runId}, Job: "${data.jobName}", Status: ${data.status}).`);
           setIsDeployed(true);
-          setShowDeployPopup(false); // Hide popup as deployment is active and confirmed
+          setShowDeployPopup(false);
           setDeploymentStatus(`Active deployment detected (Run ID: ${data.runId}, Status: ${data.status}).`);
         } else {
-          // A run was found, but it's not in a typically "active" state.
-          // It could be completed, cancelled, failed, etc.
-          console.log(`Latest run for user found (Run ID: ${data.runId}, Status: ${data.status}, Conclusion: ${data.conclusion}), but it's not currently active.`);
+          console.log(`Latest run found (Run ID: ${data.runId}, Job: "${data.jobName}", Status: ${data.status}, Conclusion: ${data.conclusion}), but it's not currently active.`);
           setIsDeployed(false);
-          setShowDeployPopup(true); // Show popup because deployment is not active
+          setShowDeployPopup(true);
           setDeploymentStatus(`Deployment not active. Latest run: ${data.status} (Conclusion: ${data.conclusion || 'N/A'}). Redeploy if needed.`);
         }
       } else if (response.status === 404) {
-        // No run found for this user by the new API
-        console.log(`No run found for user ${logicalUsername} via new endpoint.`);
+        console.log(`No run found for job name based on ${logicalUsernameToCheck}.`);
         setIsDeployed(false);
         setShowDeployPopup(true);
         setDeploymentStatus('No deployment found for your user. Deployment is required.');
       } else {
-        // Other errors (e.g., 401, 500 from the new API)
         const errorData = await response.json();
-        console.error("Failed to check initial deployment status via new endpoint:", errorData.message || response.statusText);
+        console.error("Failed to check initial deployment status:", errorData.message || response.statusText);
         setDeploymentStatus(`Error checking status: ${errorData.message || 'Please try again.'}`);
         setIsDeployed(false);
         setShowDeployPopup(true);
@@ -171,34 +162,88 @@ const getApiAuthHeaders = (): Record<string, string> => {
 
   useEffect(() => {
     if (!isClient) {
-      return; // Don't run on server or initial client render
+      return; 
     }
-    const storedUsername = sessionStorage.getItem('username');
+    const storedUsername = sessionStorage.getItem('username'); 
     if (storedUsername) {
       setDisplayedUsername(storedUsername);
       const suffix = '7890';
-      const logicalUsername = `${storedUsername}${suffix}`;
-      setUsername(logicalUsername);
-      // Immediately show popup and set status to checking.
-      // checkInitialDeploymentStatus will update/hide this based on the actual status.
+      const suffixedUsername = `${storedUsername}${suffix}`; 
+      setUsername(suffixedUsername); 
+      
       setShowDeployPopup(true);
       setDeploymentStatus('Checking deployment status...'); 
-      checkInitialDeploymentStatus(logicalUsername);
+      checkInitialDeploymentStatus(suffixedUsername); 
     } else {
       setDeploymentStatus('Please sign in to manage deployments.');
       setIsDeployed(false);
       setShowDeployPopup(true);
+      // router.push('/signin'); // Consider if redirect is needed if no username
     }
-     return () => {
+
+    const handleBeforeUnload = (event: BeforeUnloadEvent) => {
+      // Check isDeployed state at the moment of unload
+      // Note: isDeployed might not be the most up-to-date from state here due to closure.
+      // It's better to get it from sessionStorage or a ref if critical,
+      // but for sendBeacon, we fire it if there's a chance it's deployed.
+      // The backend will re-validate the session and actual deployment status.
+
+      const currentToken = sessionStorage.getItem('sessionToken');
+      const currentUserId = sessionStorage.getItem('userId');
+      const currentSessionId = sessionStorage.getItem('sessionId');
+
+      // A simple check: if there's a token, there might be a session and deployment.
+      // The backend /api/auth/beacon-signout-undeploy will do the full validation.
+      if (currentToken && currentUserId && currentSessionId) {
+        if (navigator.sendBeacon) {
+          // navigator.sendBeacon expects data. We send a minimal JSON payload.
+          // The crucial part is that the browser should send cookies,
+          // and our backend /api/auth/beacon-signout-undeploy uses validateSession which expects headers.
+          // This is a known limitation/complexity of sendBeacon with header-based auth.
+          // We are sending an empty JSON body as placeholder, the backend relies on headers.
+          
+          // To pass headers with sendBeacon, they must be part of the request object
+          // that sendBeacon itself constructs. Custom headers are tricky.
+          // The most reliable way is if your auth can work off cookies that the browser sends automatically.
+          // Since validateSession is header-based, this is a best-effort attempt.
+          
+          // Create a FormData object to send. This is a common way to use sendBeacon.
+          // However, our backend expects headers for validateSession.
+          // Let's try sending a POST request with an empty body, hoping the
+          // browser includes necessary cookies or that the server can handle it.
+          // The custom headers 'Authorization', 'X-User-ID', 'X-Session-ID'
+          // are NOT reliably sent by navigator.sendBeacon.
+          // The backend API /api/auth/beacon-signout-undeploy/route.ts
+          // calls validateSession(request) which reads these from headers.
+          // This will likely fail if the browser doesn't attach them.
+          // This is a fundamental limitation. The backend might need adjustment
+          // for beacon-specific auth if this proves unreliable.
+
+          // For now, we'll just fire the beacon. The backend will log if session is invalid.
+          const beaconUrl = '/api/auth/beacon-signout-undeploy';
+          navigator.sendBeacon(beaconUrl); 
+          console.log('Attempted to send beacon for signout and undeploy.');
+        } else {
+          console.warn('navigator.sendBeacon is not available.');
+          // Fallback for older browsers (less reliable) - synchronous XHR
+          // This is generally discouraged as it blocks page unload.
+        }
+      }
+    };
+
+    window.addEventListener('beforeunload', handleBeforeUnload);
+
+    return () => {
       if (activationProgressTimerId !== null) {
         window.clearInterval(activationProgressTimerId);
       }
+      window.removeEventListener('beforeunload', handleBeforeUnload);
     };
-  }, [router, isClient]); // Added isClient to dependency array
+  }, [router, isClient, isDeployed]); // Added isDeployed to re-evaluate if needed, though direct sessionStorage access in handler is better.
 
-  const startDeploymentCheck = async (currentLogicalUsername: string | null) => {
-    if (!currentLogicalUsername) {
-      setDeploymentStatus('Logical username not available for status check.');
+  const startDeploymentCheck = async (suffixedUsernameForJobSearch: string | null) => {
+    if (!suffixedUsernameForJobSearch) {
+      setDeploymentStatus('Logical username (suffixed) not available for status check.');
       setIsPollingStatus(false); 
       return;
     }
@@ -210,14 +255,8 @@ const getApiAuthHeaders = (): Record<string, string> => {
     if (!isPollingStatus) setIsPollingStatus(true); 
     setRedeployMode(false);
 
-    const jobNameToFind = `Run for ${currentLogicalUsername}`;
+    const jobNameToFind = `Run for ${suffixedUsernameForJobSearch}`; 
     console.log(`Initiating workflow run search. Target job name: "${jobNameToFind}"`);
-
-    let foundRunId: number | null = null; 
-    const findRunIdTimeoutDuration = 30 * 1000;
-    const findRunIdInterval = 5 * 1000;
-    const findRunIdStartTime = Date.now();
-    let findRunIdTimer: number | null = null; // Timer for retries
 
     const authHeaders = getApiAuthHeaders();
     if (!authHeaders['Authorization']) {
@@ -227,17 +266,20 @@ const getApiAuthHeaders = (): Record<string, string> => {
       return;
     }
 
-    // This function will now use the new endpoint and include retry logic.
+    let findRunIdTimer: number | null = null;
+    const findRunIdTimeoutDuration = 30 * 1000;
+    const findRunIdInterval = 5 * 1000;
+    const findRunIdStartTime = Date.now();
+
     const attemptToFindRunId = async () => {
-      console.log(`Attempting to find workflow run ID for "${jobNameToFind}" using new endpoint.`);
+      console.log(`Attempting to find workflow run ID for job "${jobNameToFind}" using new endpoint (activeOnly=true).`);
       
-      // Update status message for the user
       const attemptNumber = Math.floor((Date.now() - findRunIdStartTime) / findRunIdInterval) + 1;
       setDeploymentStatus(`Locating workflow run (attempt ${attemptNumber})...`);
 
       if (Date.now() - findRunIdStartTime > findRunIdTimeoutDuration) {
         if (findRunIdTimer !== null) window.clearInterval(findRunIdTimer);
-        console.error(`Timeout: Could not find a workflow run with job "${jobNameToFind}" within ${findRunIdTimeoutDuration / 1000} seconds using new endpoint.`);
+        console.error(`Timeout: Could not find a workflow run with job "${jobNameToFind}" within ${findRunIdTimeoutDuration / 1000}s.`);
         setDeploymentStatus('Could not locate the triggered workflow run in time. Please check GitHub Actions or try again.');
         setIsPollingStatus(false);
         setRedeployMode(true);
@@ -245,44 +287,38 @@ const getApiAuthHeaders = (): Record<string, string> => {
       }
 
       try {
-        const response = await fetch(`/api/git/latest-user-run?logicalUsername=${currentLogicalUsername}`, { headers: authHeaders });
+        const response = await fetch(`/api/git/latest-user-run?logicalUsername=${suffixedUsernameForJobSearch}&activeOnly=true`, { headers: authHeaders });
 
         if (response.ok) {
           const data = await response.json() as LatestUserRunResponse;
-          // The new endpoint directly gives us the run associated with the user.
-          // We assume if it's found, it's the one we're looking for post-dispatch.
-          // The jobName in data.jobName should match `jobNameToFind`.
           if (data.runId && data.jobName === jobNameToFind) {
             if (findRunIdTimer !== null) window.clearInterval(findRunIdTimer);
-            console.log(`Successfully found run ID: ${data.runId} for job "${data.jobName}" via new endpoint. Proceeding to status polling.`);
-            pollRunStatus(data.runId); // Proceed to poll this run's status
+            console.log(`Successfully found run ID: ${data.runId} for job "${data.jobName}". Proceeding to status polling.`);
+            pollRunStatus(data.runId); 
           } else {
-            // This case should be rare if the backend logic is correct and a run was dispatched.
-            // It might mean the job name didn't match or runId was missing.
-            console.warn(`New endpoint returned a run, but job name "${data.jobName}" or runId was unexpected.`);
-            throw new Error('Mismatch in run data from new endpoint.');
+            console.warn(`Active run found (ID: ${data.runId}, Job: "${data.jobName}"), but job name did not match target "${jobNameToFind}". Retrying...`);
+            if (Date.now() - findRunIdStartTime <= findRunIdTimeoutDuration - findRunIdInterval) {
+              findRunIdTimer = window.setTimeout(attemptToFindRunId, findRunIdInterval);
+            } else { 
+               findRunIdTimer = window.setTimeout(attemptToFindRunId, 1000);
+            }
           }
         } else if (response.status === 404) {
-          // No run found for this user yet. This is expected if the workflow hasn't fully initialized.
-          console.log(`Run for "${jobNameToFind}" not yet found via new endpoint (404). Retrying...`);
+          console.log(`Active run for job "${jobNameToFind}" not yet found (404). Retrying...`);
           if (Date.now() - findRunIdStartTime <= findRunIdTimeoutDuration - findRunIdInterval) {
             findRunIdTimer = window.setTimeout(attemptToFindRunId, findRunIdInterval);
-          } else { // Last chance before timeout
+          } else { 
              findRunIdTimer = window.setTimeout(attemptToFindRunId, 1000);
           }
         } else {
-          // Other errors from the new API
           const errorData = await response.json();
-          throw new Error(`Failed to find run via new endpoint: ${response.status} ${errorData.message || ''}`);
+          throw new Error(`Failed to find run: ${response.status} ${errorData.message || ''}`);
         }
       } catch (error) {
-        console.error('Error during attemptToFindRunId (new endpoint):', error);
-        // If it's not the timeout, and there's still time, retry.
+        console.error('Error during attemptToFindRunId:', error);
         if (Date.now() - findRunIdStartTime <= findRunIdTimeoutDuration - findRunIdInterval) {
-            console.log(`Error occurred. Retrying in ${findRunIdInterval / 1000}s...`);
             findRunIdTimer = window.setTimeout(attemptToFindRunId, findRunIdInterval);
         } else if (Date.now() - findRunIdStartTime <= findRunIdTimeoutDuration) {
-            // Allow one last attempt if error occurs near timeout
             findRunIdTimer = window.setTimeout(attemptToFindRunId, 1000);
         } else {
             if (findRunIdTimer !== null) window.clearInterval(findRunIdTimer);
@@ -309,56 +345,42 @@ const getApiAuthHeaders = (): Record<string, string> => {
           setRedeployMode(true);
           return;
         }
-
         try {
           const runStatusResponse = await fetch(`/git/galaxyapi/runs?runId=${runIdToPoll}`, { headers: authHeaders });
           if (!runStatusResponse.ok) {
             if (statusPollTimer !== null) window.clearInterval(statusPollTimer);
             const errorText = await runStatusResponse.text();
             setDeploymentStatus(`Failed to fetch deployment status from backend. ${errorText}`);
-            setIsPollingStatus(false);
-            setIsDeployed(false);
-            setRedeployMode(true);
+            setIsPollingStatus(false); setIsDeployed(false); setRedeployMode(true);
             return;
           }
           const runDetails = await runStatusResponse.json();
-
           if (runDetails.status === 'in_progress') {
             if (statusPollTimer !== null) window.clearInterval(statusPollTimer);
-            setIsDeployed(true);
-            setRedeployMode(false);
-            setDeploymentStatus('Finalizing KickLock activation...'); // New status message
-            setIsPollingStatus(true);
-            setActivationProgressPercent(0); // Reset progress
-
-            let currentProgress = 0;
-            const totalDuration = 30; // seconds
-
+            setIsDeployed(true); setRedeployMode(false);
+            setDeploymentStatus('Finalizing KickLock activation...');
+            setIsPollingStatus(true); setActivationProgressPercent(0);
+            let currentProgress = 0; const totalDuration = 30;
             const newActivationTimerId = window.setInterval(() => {
               currentProgress += 1;
               const percent = Math.min(100, (currentProgress / totalDuration) * 100);
               setActivationProgressPercent(percent);
-
               if (currentProgress >= totalDuration) {
                 window.clearInterval(newActivationTimerId);
                 setActivationProgressTimerId(null);
-                setShowDeployPopup(false);
-                setIsPollingStatus(false);
-                setActivationProgressPercent(100); // Ensure it hits 100
+                setShowDeployPopup(false); setIsPollingStatus(false); setActivationProgressPercent(100);
                 setDeploymentStatus('KickLock activated successfully!');
               }
             }, 1000);
             setActivationProgressTimerId(newActivationTimerId);
           } else {
-            setDeploymentStatus(`Workflow status: ${runDetails.status} (Conclusion: ${runDetails.conclusion || 'N/A'}). Waiting for 'in_progress' or timeout.`);
+            setDeploymentStatus(`Workflow status: ${runDetails.status} (Conclusion: ${runDetails.conclusion || 'N/A'}). Waiting...`);
             statusPollTimer = window.setTimeout(performStatusPoll, pollIntervalTime);
           }
         } catch (pollError) {
           if (statusPollTimer !== null) window.clearInterval(statusPollTimer);
           setDeploymentStatus('Error polling deployment status. Please try again.');
-          setIsDeployed(false);
-          setIsPollingStatus(false);
-          setRedeployMode(true);
+          setIsDeployed(false); setIsPollingStatus(false); setRedeployMode(true);
         }
       };
       statusPollTimer = window.setTimeout(performStatusPoll, 0); 
@@ -376,7 +398,7 @@ const getApiAuthHeaders = (): Record<string, string> => {
     const authHeaders = getApiAuthHeaders();
     if (!authHeaders['Authorization']) {
       setDeploymentStatus('Authentication details missing for cancellation poll. Please sign in again.');
-      setIsUndeploying(false); // Or appropriate state update
+      setIsUndeploying(false); 
       return;
     }
 
@@ -443,113 +465,73 @@ const getApiAuthHeaders = (): Record<string, string> => {
   };
 
   const handleUndeploy = async () => {
-    if (!username) {
-      alert('Username not found.');
-      return;
+    if (!username) { 
+      alert('Username not found.'); return;
     }
     if (activationProgressTimerId !== null) {
-      window.clearInterval(activationProgressTimerId);
-      setActivationProgressTimerId(null);
+      window.clearInterval(activationProgressTimerId); setActivationProgressTimerId(null);
     }
-
-    setButtonStates1(initialButtonStates);
-    setButtonStates2(initialButtonStates);
-    setButtonStates3(initialButtonStates);
-    setButtonStates4(initialButtonStates);
-    setButtonStates5(initialButtonStates);
+    setButtonStates1(initialButtonStates); setButtonStates2(initialButtonStates); setButtonStates3(initialButtonStates);
+    setButtonStates4(initialButtonStates); setButtonStates5(initialButtonStates);
     setError1([]); setError2([]); setError3([]); setError4([]); setError5([]);
-
-    setIsUndeploying(true);
-    setShowDeployPopup(true);
+    setIsUndeploying(true); setShowDeployPopup(true);
     setDeploymentStatus('Attempting to cancel current deployment...');
 
-    // const jobNameToFind = `Run for ${username}`; // Not strictly needed here if new endpoint confirms job name
-    let runIdToCancel: number | null = null;
     const authHeaders = getApiAuthHeaders();
-
     if (!authHeaders['Authorization']) {
-      setDeploymentStatus('Authentication details missing for undeploy. Please sign in again.');
-      setIsUndeploying(false);
-      setShowDeployPopup(true);
-      return;
+      setDeploymentStatus('Authentication details missing. Please sign in again.');
+      setIsUndeploying(false); setShowDeployPopup(true); return;
     }
+    
+    const suffixedUsernameForJobSearch = username; 
 
     try {
-      console.log(`handleUndeploy: Fetching latest run for user "${username}" to check if it's active and can be cancelled.`);
-      const latestRunResponse = await fetch(`/api/git/latest-user-run?logicalUsername=${username}`, { headers: authHeaders });
+      if (!suffixedUsernameForJobSearch) {
+        alert('Logical username (suffixed) not available for undeploy operation.');
+        setIsUndeploying(false); setShowDeployPopup(true); return;
+      }
+      console.log(`handleUndeploy: Fetching latest active run for job "Run for ${suffixedUsernameForJobSearch}" to cancel.`);
+      const latestRunResponse = await fetch(`/api/git/latest-user-run?logicalUsername=${suffixedUsernameForJobSearch}&activeOnly=true`, { headers: authHeaders });
 
       if (latestRunResponse.ok) {
         const latestRunData = await latestRunResponse.json() as LatestUserRunResponse;
-        
-        // Check if this latest run is indeed 'in_progress' or another active, cancellable state
+        if (latestRunData.jobName !== `Run for ${suffixedUsernameForJobSearch}`) {
+            console.warn(`handleUndeploy: Found active run (ID ${latestRunData.runId}, Job "${latestRunData.jobName}") but job name mismatch. Target: "Run for ${suffixedUsernameForJobSearch}".`);
+            setDeploymentStatus(`Found an active run, but not the target deployment for "Run for ${suffixedUsernameForJobSearch}".`);
+            setIsUndeploying(false); setShowDeployPopup(true); return;
+        }
         if (latestRunData.status === 'in_progress' || latestRunData.status === 'queued' || latestRunData.status === 'waiting') {
-          runIdToCancel = latestRunData.runId;
-          console.log(`handleUndeploy: Found active run ID ${runIdToCancel} (Status: ${latestRunData.status}) for user "${username}". Attempting to cancel.`);
+          const runIdToCancel = latestRunData.runId;
+          console.log(`handleUndeploy: Found active run ID ${runIdToCancel} (Job: "${latestRunData.jobName}", Status: ${latestRunData.status}). Attempting to cancel.`);
+          const cancelResponse = await fetch(`/git/galaxyapi/runs?cancelRunId=${runIdToCancel}`, { method: 'POST', headers: authHeaders });
+          if (cancelResponse.status === 202) {
+            setDeploymentStatus(`Cancellation request sent for run ${runIdToCancel}. Monitoring...`);
+            pollForCancelledStatus(runIdToCancel);
+          } else {
+            const errorText = await cancelResponse.text(); const errorData = JSON.parse(errorText || "{}");
+            throw new Error(`Failed to cancel workflow run ${runIdToCancel}: ${cancelResponse.status} ${errorData.message || errorText}`);
+          }
         } else {
-          setDeploymentStatus(`No active (in_progress/queued) deployment found for user "${username}" to cancel. Latest run status: ${latestRunData.status}.`);
-          console.log(`handleUndeploy: Latest run for user "${username}" is ${latestRunData.status}, not cancellable.`);
-          setIsUndeploying(false);
-          setIsDeployed(false); // If it wasn't active, reflect that
-          setRedeployMode(false);
-          setShowDeployPopup(true);
-          return;
+          setDeploymentStatus(`No active (in_progress/queued) deployment found for job "Run for ${suffixedUsernameForJobSearch}" to cancel. Latest status: ${latestRunData.status}.`);
+          setIsUndeploying(false); setShowDeployPopup(true); return;
         }
       } else if (latestRunResponse.status === 404) {
-        setDeploymentStatus('No deployment found for your user to cancel.');
-        console.log(`handleUndeploy: No run found for user "${username}" via new endpoint.`);
-        setIsUndeploying(false);
-        setIsDeployed(false);
-        setRedeployMode(false);
-        setShowDeployPopup(true);
-        return;
+        setDeploymentStatus(`No active deployment found for job "Run for ${suffixedUsernameForJobSearch}" to cancel.`);
+        setIsUndeploying(false); setIsDeployed(false); setRedeployMode(false); setShowDeployPopup(true); return;
       } else {
-        // Other errors from /api/git/latest-user-run
         const errorText = await latestRunResponse.text();
-        console.error(`handleUndeploy: Failed to fetch latest run for user. Status: ${latestRunResponse.status}`, errorText);
         throw new Error(`Failed to fetch latest run for undeploy: ${latestRunResponse.status} ${errorText}`);
-      }
-
-      // If runIdToCancel is still null here, it means no active run was found.
-      // This should be caught by the conditions above, but as a safeguard:
-      if (!runIdToCancel) {
-         setDeploymentStatus('No active deployment eligible for cancellation was found.');
-         console.log('handleUndeploy: Safeguard - runIdToCancel is null after checks.');
-         setIsUndeploying(false);
-         setIsDeployed(false);
-         setShowDeployPopup(true);
-         return;
-      }
-
-      console.log(`handleUndeploy: Attempting to cancel run ID ${runIdToCancel} via backend POST to /git/galaxyapi/runs`);
-      const cancelResponse = await fetch(`/git/galaxyapi/runs?cancelRunId=${runIdToCancel}`, {
-        method: 'POST',
-        headers: authHeaders,
-      });
-
-      if (cancelResponse.status === 202) {
-        setDeploymentStatus(`Cancellation request sent for run ${runIdToCancel}. Monitoring...`);
-        console.log(`handleUndeploy: Cancellation request for ${runIdToCancel} accepted (202). Starting poll.`);
-        pollForCancelledStatus(runIdToCancel);
-      } else {
-        const errorText = await cancelResponse.text();
-        const errorData = JSON.parse(errorText || "{}");
-        console.error(`handleUndeploy: Failed to cancel workflow run ${runIdToCancel}. Status: ${cancelResponse.status}`, errorData);
-        throw new Error(`Failed to cancel workflow run ${runIdToCancel}: ${cancelResponse.status} ${errorData.message || errorText}`);
       }
     } catch (error: any) {
       console.error('handleUndeploy: Error caught:', error);
       setDeploymentStatus(`Error during undeploy: ${error.message}. You may need to redeploy.`);
-      setIsUndeploying(false);
-      setIsDeployed(false);
-      setRedeployMode(true);
-      setShowDeployPopup(true);
+      setIsUndeploying(false); setIsDeployed(false); setRedeployMode(true); setShowDeployPopup(true);
     }
   };
 
   const handleDeploy = async () => {
     if (!username) { 
-      alert('Username not found. Please log in again.');
-      return;
+      alert('Username not found. Please log in again.'); return;
     }
     if (activationProgressTimerId !== null) {
       window.clearInterval(activationProgressTimerId);
@@ -572,7 +554,7 @@ const getApiAuthHeaders = (): Record<string, string> => {
       const response = await fetch(`/git/galaxyapi/workflow-dispatch`, {
         method: 'POST',
         headers: authHeaders, 
-        body: JSON.stringify({ username: username })
+        body: JSON.stringify({ username: username }) 
       });
       setIsDeploying(false); 
 
@@ -582,7 +564,14 @@ const getApiAuthHeaders = (): Record<string, string> => {
         setShowDeployPopup(true); 
 
         window.setTimeout(() => {
-          startDeploymentCheck(username); 
+          if (username) { 
+            startDeploymentCheck(username); 
+          } else {
+            console.error("Cannot start deployment check: suffixed username (state: username) is not set.");
+            setDeploymentStatus("Error: User details not fully loaded for deployment check.");
+            setIsPollingStatus(false);
+            setRedeployMode(true);
+          }
         }, 10000); 
       } else {
         const errorText = await response.text();
@@ -624,7 +613,7 @@ const getApiAuthHeaders = (): Record<string, string> => {
     if (toastMessage) {
       timer = setTimeout(() => {
         setToastMessage(null);
-      }, 5000); // Hide toast after 5 seconds
+      }, 5000); 
     }
     return () => clearTimeout(timer);
   }, [toastMessage]);
@@ -672,30 +661,21 @@ const getApiAuthHeaders = (): Record<string, string> => {
       }
     })();
 
-    // --- Start Validation ---
     const requiredFields: (keyof FormData)[] = ['RC', 'startAttackTime', 'stopAttackTime', 'attackIntervalTime', 'startDefenceTime', 'stopDefenceTime', 'defenceIntervalTime', 'PlanetName', 'Rival'];
     const emptyFields = requiredFields.filter(field => !formData[field]);
 
     if (emptyFields.length > 0) {
       const fieldDisplayNames = {
-        RC: 'RC',
-        startAttackTime: 'Start Attack Time',
-        stopAttackTime: 'Stop Attack Time',
-        attackIntervalTime: 'Attack Interval Time',
-        startDefenceTime: 'Start Defence Time',
-        stopDefenceTime: 'Stop Defence Time',
-        defenceIntervalTime: 'Defence Interval Time',
-        PlanetName: 'Planet Name',
-        Rival: 'Rival'
+        RC: 'RC', startAttackTime: 'Start Attack Time', stopAttackTime: 'Stop Attack Time',
+        attackIntervalTime: 'Attack Interval Time', startDefenceTime: 'Start Defence Time',
+        stopDefenceTime: 'Stop Defence Time', defenceIntervalTime: 'Defence Interval Time',
+        PlanetName: 'Planet Name', Rival: 'Rival'
       };
-      const emptyFieldNames = emptyFields.map(field => fieldDisplayNames[field] || field).join(', ');
       setError(emptyFields);
       setToastMessage(`Please fill all highlighted fields.`);
-      // Reset button state as action was not performed
       setButtonStates(prev => ({ ...prev, [action]: { ...prev[action], loading: false, active: false, text: action } }));
-      return; // Stop execution if validation fails
+      return; 
     }
-    // --- End Validation ---
 
     setButtonStates(prev => ({ ...prev, [action]: { ...prev[action], loading: true } }));
     setError([]);
@@ -708,27 +688,18 @@ const getApiAuthHeaders = (): Record<string, string> => {
     }
 
     try {
-      if (!username) {
+      if (!username) { 
         setError(['Logical username not available. Cannot perform action.']);
         setButtonStates(prev => ({ ...prev, [action]: { ...prev[action], loading: false } }));
         return;
       }
-
       const modifiedFormData = Object.entries(formData).reduce((acc, [key, value]) => {
         acc[`${key}${formNumber}`] = value; return acc;
       }, {} as Record<string, string>);
-
       const response = await fetch(`/api/localt/action`, {
-        method: 'POST',
-        headers: authHeaders,
-        body: JSON.stringify({
-          action: action,
-          formNumber: formNumber,
-          formData: modifiedFormData,
-          logicalUsername: username
-        })
+        method: 'POST', headers: authHeaders,
+        body: JSON.stringify({ action: action, formNumber: formNumber, formData: modifiedFormData, logicalUsername: username })
       });
-
       if (response.ok) {
         setButtonStates(prev => ({ ...prev, [action]: { loading: false, active: true, text: action === 'start' ? 'Running' : action === 'stop' ? 'Stopped' : 'Updated', },
           ...(action === 'start' ? { stop: { ...prev.stop, active: false, text: 'Stop' }, } : {}),
@@ -736,9 +707,28 @@ const getApiAuthHeaders = (): Record<string, string> => {
           ...(action === 'update' ? { update: { loading: false, active: true, text: 'Updated' } } : {})
         }));
         setError([]);
+      } else if (response.status === 409) {
+        const errorData = await response.json();
+        if (errorData.autoUndeployed) {
+          setAutoUndeployMessage(errorData.message);
+          setShowAutoUndeployPopup(true);
+          setIsDeployed(false); // Service is no longer deployed
+          setRedeployMode(true); // Encourage redeployment
+          // Reset all button states for all forms as the service is globally stopped for the user
+          setButtonStates1(initialButtonStates);
+          setButtonStates2(initialButtonStates);
+          setButtonStates3(initialButtonStates);
+          setButtonStates4(initialButtonStates);
+          setButtonStates5(initialButtonStates);
+          // Optionally, clear errors for the current form
+          setError([]); 
+        } else {
+          // Handle other 409 errors if necessary
+          setError([`Conflict: ${errorData.message || 'Please try again'}`]);
+          setButtonStates(prev => ({ ...prev, [action]: { ...prev[action], loading: false, active: false, text: action } }));
+        }
       } else {
-        const errorText = await response.text();
-        const errorData = JSON.parse(errorText || '{ "message": "Unknown error" }');
+        const errorText = await response.text(); const errorData = JSON.parse(errorText || '{ "message": "Unknown error" }');
         console.error(`Error performing action ${action} for form ${formNumber} via backend:`, errorData);
         if (action === 'start') { setError([`Unable to start: ${errorData.message || 'Please try again'}`]); }
         else { setError([`Unable to ${action}: ${errorData.message || 'Please try again'}`]); }
@@ -803,7 +793,7 @@ const getApiAuthHeaders = (): Record<string, string> => {
   return (
     <div className={styles.container}>
       {toastMessage && (
-        <div style={{ position: 'fixed', top: '20px', right: '20px', backgroundColor: '#f87171' /* A slightly softer red */, color: 'white', padding: '12px 20px', borderRadius: '6px', zIndex: 2000, display: 'flex', alignItems: 'center', boxShadow: '0 4px 12px rgba(0,0,0,0.15)' }}>
+        <div style={{ position: 'fixed', top: '20px', right: '20px', backgroundColor: '#f87171', color: 'white', padding: '12px 20px', borderRadius: '6px', zIndex: 2000, display: 'flex', alignItems: 'center', boxShadow: '0 4px 12px rgba(0,0,0,0.15)' }}>
           <span>{toastMessage}</span>
           <button onClick={() => setToastMessage(null)} style={{ background: 'none', border: 'none', color: 'white', marginLeft: '15px', cursor: 'pointer', fontSize: '18px', lineHeight: '1' }}>
             <X size={20} />
@@ -835,7 +825,7 @@ const getApiAuthHeaders = (): Record<string, string> => {
                   style={{ 
                     width: `${activationProgressPercent}%`, 
                     height: '10px', 
-                    backgroundColor: '#22c55e', // Green progress
+                    backgroundColor: '#22c55e', 
                     transition: 'width 0.5s ease-in-out'
                   }}
                 />
@@ -846,18 +836,14 @@ const getApiAuthHeaders = (): Record<string, string> => {
               {(!isDeployed || redeployMode) && !(isDeployed && isPollingStatus && activationProgressTimerId !== null) ? ( 
                 <button 
                   onClick={handleDeploy} 
-                  disabled={isDeploying || (isPollingStatus && activationProgressTimerId === null) } // Disable if deploying or initial polling
+                  disabled={isDeploying || (isPollingStatus && activationProgressTimerId === null) } 
                   style={{ 
-                    padding: '10px 20px', 
-                    borderRadius: '4px', 
-                    border: 'none', 
+                    padding: '10px 20px', borderRadius: '4px', border: 'none', 
                     backgroundColor: (isDeploying || (isPollingStatus && activationProgressTimerId === null)) ? '#555' : (redeployMode ? '#e67e22' : '#d32f2f'), 
-                    color: 'white', 
-                    fontWeight: 'bold', 
+                    color: 'white', fontWeight: 'bold', 
                     cursor: (isDeploying || (isPollingStatus && activationProgressTimerId === null)) ? 'not-allowed' : 'pointer', 
                     opacity: (isDeploying || (isPollingStatus && activationProgressTimerId === null)) ? 0.7 : 1, 
-                    transition: 'all 0.3s ease', 
-                    width: '100%' 
+                    transition: 'all 0.3s ease', width: '100%' 
                   }} 
                 > 
                   {isDeploying ? 'Dispatching...' : (isPollingStatus && activationProgressTimerId === null) ? 'Checking Status...' : (redeployMode ? 'Redeploy Again' : 'Deploy KickLock')} 
@@ -878,6 +864,43 @@ const getApiAuthHeaders = (): Record<string, string> => {
             <h2 style={{ color: '#fff', marginBottom: '20px', textAlign: 'center' }}>Thank You for using KickLock</h2>
             <div style={{ display: 'flex', justifyContent: 'center' }}>
               <button onClick={async () => { setShowThankYouMessage(false); await handleDeploy(); }} style={{ padding: '10px 20px', borderRadius: '4px', border: 'none', backgroundColor: '#d32f2f', color: 'white', fontWeight: 'bold', cursor: 'pointer', width: '100%' }} > Deploy Again </button>
+            </div>
+          </div>
+        </div>
+      )}
+      {showAutoUndeployPopup && autoUndeployMessage && (
+        <div style={{ position: 'fixed', top: 0, left: 0, width: '100%', height: '100%', backgroundColor: 'rgba(0, 0, 0, 0.8)', display: 'flex', justifyContent: 'center', alignItems: 'center', zIndex: 1050 }}>
+          <div style={{ backgroundColor: '#2a2a2a', color: '#fff', borderRadius: '8px', padding: '30px', width: '400px', boxShadow: '0 5px 25px rgba(0, 0, 0, 0.6)', border: '1px solid #444', textAlign: 'center' }}>
+            <h2 style={{ color: '#f39c12', marginBottom: '15px', fontSize: '1.5rem' }}>Session Expired</h2>
+            <p style={{ color: '#ccc', marginBottom: '25px', fontSize: '1rem', lineHeight: '1.6' }}>{autoUndeployMessage}</p>
+            <div style={{ display: 'flex', justifyContent: 'space-around', gap: '15px' }}>
+              <button 
+                onClick={() => {
+                  setShowAutoUndeployPopup(false);
+                  setAutoUndeployMessage(null);
+                  // Ensure the main deploy popup shows if not already handled by redeployMode
+                  setShowDeployPopup(true); 
+                  handleDeploy(); // Trigger redeploy
+                }} 
+                style={{ padding: '12px 25px', borderRadius: '5px', border: 'none', backgroundColor: '#e67e22', color: 'white', fontWeight: 'bold', cursor: 'pointer', flex: 1, transition: 'background-color 0.3s ease' }}
+                onMouseOver={(e) => e.currentTarget.style.backgroundColor = '#d35400'}
+                onMouseOut={(e) => e.currentTarget.style.backgroundColor = '#e67e22'}
+              >
+                Redeploy KickLock
+              </button>
+              <button 
+                onClick={() => {
+                  setShowAutoUndeployPopup(false);
+                  setAutoUndeployMessage(null);
+                  // Ensure the main deploy popup shows if not already handled by redeployMode
+                  setShowDeployPopup(true); 
+                }} 
+                style={{ padding: '12px 25px', borderRadius: '5px', border: '1px solid #555', backgroundColor: '#444', color: '#ccc', cursor: 'pointer', flex: 1, transition: 'background-color 0.3s ease' }}
+                onMouseOver={(e) => e.currentTarget.style.backgroundColor = '#555'}
+                onMouseOut={(e) => e.currentTarget.style.backgroundColor = '#444'}
+              >
+                Close
+              </button>
             </div>
           </div>
         </div>

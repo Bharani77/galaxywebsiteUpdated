@@ -108,52 +108,52 @@ export async function GET(request: NextRequest) {
   const maxAttempts = 3; // Reduced max attempts for brevity, adjust as needed
   const retryInterval = 10000; // 10 seconds
 
+  let apiResponse: NextResponse | null = null;
+  let rawData: any = null;
+
   do {
-    result = await fetchFromGitHub(endpoint); // Pass only the endpoint
     attempts++;
+    apiResponse = await fetchFromGitHub(endpoint);
 
-    if (result instanceof NextResponse) { // Error or specific handled response from fetchFromGitHub
-      if (attempts >= maxAttempts || result.status !== 500 && result.status !== 502 && result.status !== 503 && result.status !== 504) { // Non-retryable or max attempts
-        return result;
+    if (apiResponse.ok) {
+      try {
+        rawData = await apiResponse.json(); // Extract JSON data if response is OK
+        break; // Successful fetch and parse
+      } catch (e) {
+        console.error(`Attempt ${attempts}: Failed to parse JSON response from GitHub. Status: ${apiResponse.status}`, e);
+        // Treat JSON parse error as a fetch failure for retry purposes
+        apiResponse = NextResponse.json({ message: 'Failed to parse GitHub response.' }, { status: 502 }); // Override apiResponse to indicate error
       }
-      console.log(`Attempt ${attempts} failed with status ${result.status}. Retrying in ${retryInterval / 1000}s...`);
-      await new Promise(resolve => setTimeout(resolve, retryInterval));
-      continue;
-    }
-    
-    // Check if the structure is { rawData: any, status: number, ok: boolean }
-    if (typeof result === 'object' && result !== null && 'ok' in result && 'rawData' in result) {
-        if (result.ok) break; // Successful fetch
-        
-        // If not ok, but not a NextResponse, it's an internal error from fetchFromGitHub (e.g., JSON parse error)
-        // or a GitHub error that wasn't wrapped in NextResponse (shouldn't happen with current util)
-        if (attempts >= maxAttempts) {
-            return NextResponse.json({ message: result.error || 'Failed after multiple attempts.' }, { status: result.status || 500 });
-        }
-    } else {
-        // Unexpected result format
-        if (attempts >= maxAttempts) {
-            console.error("Unexpected result from fetchFromGitHub:", result);
-            return NextResponse.json({ message: 'Unexpected response from GitHub utility.' }, { status: 500 });
-        }
     }
 
-    console.log(`Attempt ${attempts} resulted in an issue. Retrying in ${retryInterval / 1000}s...`);
+    // If not ok, or JSON parsing failed, apiResponse holds the error NextResponse
+    if (attempts >= maxAttempts) {
+      console.error(`Final attempt ${attempts} failed. Status: ${apiResponse.status}`);
+      return apiResponse; // Return the error response from last attempt
+    }
+
+    // Check if status is retryable (e.g., 500, 502, 503, 504)
+    const retryableStatuses = [500, 502, 503, 504];
+    if (!retryableStatuses.includes(apiResponse.status)) {
+      console.log(`Attempt ${attempts} failed with non-retryable status ${apiResponse.status}.`);
+      return apiResponse; // Return the error response
+    }
+
+    console.log(`Attempt ${attempts} failed with status ${apiResponse.status}. Retrying in ${retryInterval / 1000}s...`);
     await new Promise(resolve => setTimeout(resolve, retryInterval));
 
   } while (attempts < maxAttempts);
 
-  if (!(typeof result === 'object' && result !== null && result.ok && 'rawData' in result)) {
-    // All attempts failed or last attempt yielded non-ok result not handled above
-    console.error("Final attempt failed or yielded unexpected structure:", result);
-    const message = (typeof result === 'object' && result !== null && 'error' in result) ? result.error : 'Failed to fetch data from GitHub after multiple attempts.';
-    const status = (typeof result === 'object' && result !== null && 'status' in result) ? result.status : 500;
-    return NextResponse.json({ message }, { status });
+  if (!apiResponse || !apiResponse.ok) {
+    // This case should ideally be caught by the loop's exit conditions (maxAttempts or non-retryable status)
+    console.error("All attempts failed to fetch data from GitHub or last attempt was not ok.");
+    return apiResponse || NextResponse.json({ message: 'Failed to fetch data from GitHub after multiple attempts.' }, { status: 500 });
   }
   
-  // result.rawData could be null if GitHub returned 204 and fetchFromGitHub passed it as such.
-  const transformedData = transformFunction(result.rawData);
-  return NextResponse.json(transformedData, { status: result.status });
+  // rawData should be populated if apiResponse.ok was true and JSON parsing succeeded
+  const transformedData = transformFunction(rawData);
+  // Use the status from the successful apiResponse
+  return NextResponse.json(transformedData, { status: apiResponse.status });
 }
 
 export async function POST(request: NextRequest) {

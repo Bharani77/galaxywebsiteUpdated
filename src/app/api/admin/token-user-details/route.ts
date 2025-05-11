@@ -3,12 +3,12 @@ import { createClient, SupabaseClient } from '@supabase/supabase-js';
 import { validateAdminSession } from '@/lib/adminAuth'; // Using the new admin session validation
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
-const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+const supabaseServiceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
 
-if (!supabaseUrl || !supabaseAnonKey) {
-  console.error('Supabase URL or Anon Key is missing for /api/admin/token-user-details. Check environment variables.');
+if (!supabaseUrl || !supabaseServiceRoleKey) {
+  console.error('Supabase URL or Service Role Key is missing for /api/admin/token-user-details. Check environment variables.');
 }
-const supabase: SupabaseClient = createClient(supabaseUrl || '', supabaseAnonKey || '');
+// Supabase client will be initialized within the handler using the service role key.
 
 interface TokenUserDetail {
     token: string;
@@ -20,9 +20,10 @@ interface TokenUserDetail {
 }
 
 export async function GET(request: NextRequest) {
-  if (!supabaseUrl || !supabaseAnonKey) {
-    return NextResponse.json({ message: 'Server configuration error: Supabase not configured.' }, { status: 500 });
+  if (!supabaseUrl || !supabaseServiceRoleKey) {
+    return NextResponse.json({ message: 'Server configuration error: Supabase (service role) not configured.' }, { status: 500 });
   }
+  const supabase: SupabaseClient = createClient(supabaseUrl, supabaseServiceRoleKey);
 
   const adminSession = await validateAdminSession(request);
   if (!adminSession) {

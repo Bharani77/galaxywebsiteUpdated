@@ -1,31 +1,33 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
 import { validateAdminSession } from '@/lib/adminAuth';
+import crypto from 'crypto'; // Import crypto module
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
-const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+const supabaseServiceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
 
-if (!supabaseUrl || !supabaseAnonKey) {
-  console.error('Supabase URL or Anon Key is missing for /api/admin/tokens. Check environment variables.');
+if (!supabaseUrl || !supabaseServiceRoleKey) {
+  console.error('Supabase URL or Service Role Key is missing for /api/admin/tokens. Check environment variables.');
 }
-const supabase: SupabaseClient = createClient(supabaseUrl || '', supabaseAnonKey || '');
+// Supabase client will be initialized within handlers using the service role key.
 
-// Server-side token generation logic
-const generateTokenString = (): string => {
-  return Array(16)
-    .fill(0)
-    .map(() => {
-      const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
-      return chars.charAt(Math.floor(Math.random() * chars.length));
-    })
-    .join('');
+// Server-side token generation logic using crypto for security
+const generateTokenString = (length: number = 16): string => {
+  // Generate a cryptographically secure random string.
+  // crypto.randomBytes(Math.ceil(length / 2)) generates 'length' hex characters.
+  // Or use a more complex character set if desired, but hex is common and safe.
+  // For a 16-char token, 8 bytes -> 16 hex chars.
+  // If you want more entropy or different char set, adjust accordingly.
+  // Example: crypto.randomBytes(16).toString('base64url').slice(0, length);
+  return crypto.randomBytes(Math.ceil(length * 3 / 4)).toString('base64url').slice(0, length); // base64url is good for URLs
 };
 
 // POST: Generate a new token
 export async function POST(request: NextRequest) {
-  if (!supabaseUrl || !supabaseAnonKey) {
-    return NextResponse.json({ message: 'Server configuration error: Supabase not configured.' }, { status: 500 });
+  if (!supabaseUrl || !supabaseServiceRoleKey) {
+    return NextResponse.json({ message: 'Server configuration error: Supabase (service role) not configured.' }, { status: 500 });
   }
+  const supabase: SupabaseClient = createClient(supabaseUrl, supabaseServiceRoleKey);
 
   const adminSession = await validateAdminSession(request);
   if (!adminSession) {
@@ -89,9 +91,10 @@ export async function POST(request: NextRequest) {
 
 // DELETE: Delete a token by its ID
 export async function DELETE(request: NextRequest) {
-  if (!supabaseUrl || !supabaseAnonKey) {
-    return NextResponse.json({ message: 'Server configuration error: Supabase not configured.' }, { status: 500 });
+  if (!supabaseUrl || !supabaseServiceRoleKey) {
+    return NextResponse.json({ message: 'Server configuration error: Supabase (service role) not configured.' }, { status: 500 });
   }
+  const supabase: SupabaseClient = createClient(supabaseUrl, supabaseServiceRoleKey);
 
   const adminSession = await validateAdminSession(request);
   if (!adminSession) {
