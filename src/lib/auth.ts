@@ -7,7 +7,7 @@ export interface UserSession {
   username: string; // This would be the username from the users table
   deployTimestamp?: string | null; // ISO string format for timestamp
   activeFormNumber?: number | null;
-  tokenExpiresAt?: string | number | Date | null; // Added token expiry
+  // tokenExpiresAt?: string | number | Date | null; // Temporarily remove
 }
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
@@ -56,8 +56,8 @@ export async function validateSession(request: NextRequest): Promise<UserSession
   try {
     const { data: user, error } = await supabaseService // Use service client
       .from('users')
-      // Add token_expires_at to the select query
-      .select('id, username, session_token, active_session_id, deploy_timestamp, active_form_number, token_expires_at')
+      // Temporarily remove token_expires_at from select if it's causing schema issues
+      .select('id, username, session_token, active_session_id, deploy_timestamp, active_form_number')
       .eq('id', requestUserId)
       .single();
 
@@ -79,7 +79,7 @@ export async function validateSession(request: NextRequest): Promise<UserSession
         username: user.username,
         deployTimestamp: user.deploy_timestamp,
         activeFormNumber: user.active_form_number,
-        tokenExpiresAt: user.token_expires_at // Add to returned object
+        // tokenExpiresAt: user.token_expires_at // Temporarily remove
       };
     } else {
       console.log('Session validation failed (validateSession): Token or Session ID mismatch.');
