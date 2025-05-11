@@ -3,6 +3,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
 import crypto from 'crypto'; // Import crypto module
 import bcrypt from 'bcrypt'; // Import bcrypt
+import { performServerSideUndeploy } from '@/lib/deploymentUtils'; // Added for server-side undeploy
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
 // const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY; // No longer using module-level anon client
@@ -38,9 +39,10 @@ export async function POST(request: NextRequest) {
     }
 
     // 1. Authenticate User (from authenticateUser)
+    // Fetch deploy_timestamp and active_form_number as well
     const { data: user, error: authError } = await supabaseService // Use service client
       .from("users")
-      .select("id, username, password, active_session_id, login_count")
+      .select("id, username, password, active_session_id, login_count, deploy_timestamp, active_form_number")
       .eq("username", username)
       .single();
 
@@ -60,34 +62,53 @@ export async function POST(request: NextRequest) {
     const newSessionToken = generateSessionToken();
     const newSessionId = generateSessionId();
 
-    // 3. Terminate existing session if any (from handleSubmit)
+    // 3. Terminate existing session AND undeploy if active
     if (user.active_session_id) {
-      console.log(`Terminating existing session ${user.active_session_id} for user ${user.id}`);
-      // Note: The original code updated the DB first, then sent broadcast.
-      // It might be safer to ensure the DB update for termination happens
-      // *before* or *atomically with* setting the new session.
-      // For simplicity, following original flow:
-      
-      // Send broadcast first (as original code did before updating current user's session)
-      // Using service client for broadcast as well for consistency and to bypass potential RLS on broadcast.
+      console.log(`[SignIn] User ${user.username} (ID: ${user.id}) is signing in, potentially terminating existing session ${user.active_session_id}.`);
+
+      // Check if there's an active deployment for this user that needs to be undeployed
+      if (user.deploy_timestamp && user.active_form_number) {
+        console.log(`[SignIn] User ${user.username} has an active deployment (Form: ${user.active_form_number}, Timestamp: ${user.deploy_timestamp}). Attempting server-side undeploy.`);
+        
+        // Pass supabaseService to performServerSideUndeploy if it's designed to accept it,
+        // or ensure it creates its own client if not.
+        // Based on deploymentUtils.ts, it expects supabaseService as the last arg.
+        const undeployResult = await performServerSideUndeploy(
+          user.id.toString(),
+          user.username, // Plain username for logical username generation
+          user.deploy_timestamp,
+          user.active_form_number,
+          supabaseService // Pass the existing service client
+        );
+
+        if (!undeployResult.success) {
+          console.error(`[SignIn] Server-side undeploy failed for user ${user.username} during new sign-in. Reason: ${undeployResult.message}`);
+          // Return an error to Browser B, making it wait/informing the user.
+          return NextResponse.json({ 
+            message: `Sign-in blocked: Failed to undeploy previous active session. ${undeployResult.message} Please try again or contact support.` 
+          }, { status: 409 }); // 409 Conflict might be appropriate
+        }
+        console.log(`[SignIn] Server-side undeploy successful for user ${user.username}.`);
+      } else {
+        console.log(`[SignIn] No active deployment found for user ${user.username} to undeploy during new sign-in.`);
+      }
+
+      // Proceed with broadcasting session termination for other tabs/devices of this user
+      console.log(`[SignIn] Broadcasting session_terminated event for user ${user.id}'s old session.`);
       try {
-        const sendStatus = await supabaseService // Use service client
+        const sendStatus = await supabaseService
           .channel('session_updates')
           .send({
             type: 'broadcast',
             event: 'session_terminated',
-            payload: { userId: user.id } // Ensure this matches what client expects (e.g. int)
+            payload: { userId: user.id } 
           });
         if (sendStatus !== 'ok') {
-            console.error("Error broadcasting session termination. Status:", sendStatus);
-            // Decide if this is a critical failure. For now, we'll proceed.
+            console.error("[SignIn] Error broadcasting session termination. Status:", sendStatus);
         }
       } catch (e) {
-        console.error("Exception during broadcast:", e);
+        console.error("[SignIn] Exception during broadcast for session termination:", e);
       }
-      // The actual DB update to nullify the old session for *other* users happens when they try to validate their old token,
-      // or if the client receives the broadcast and clears its own state.
-      // The current user's old session is implicitly terminated by updating their record with the new session.
     }
 
     // 4. Update user's session in DB (from updateUserSession)

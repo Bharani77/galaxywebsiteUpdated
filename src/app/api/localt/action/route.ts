@@ -1,19 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { validateSession, UserSession, updateUserDeployStatus } from '@/lib/auth'; // Assuming @/ is configured for src/
+import { getLogicalUsername } from '@/lib/deploymentUtils'; // Import from deploymentUtils
 
 const ONE_HOUR_MS = 60 * 60 * 1000;
 
-// Helper function to get the logical username.
-// Adjust this if your session.username is not the logicalUsername needed for loca.lt
-function getLogicalUsername(session: UserSession): string {
-  // In GalaxyForm.tsx, logicalUsername is created as:
-  // const suffix = '7890'; 
-  // const logicalUsername = `${storedUsername}${suffix}`;
-  // We assume session.username from auth.ts is already this logicalUsername.
-  // If session.username is the 'displayedUsername', you'd append the suffix here.
-  // For example: return `${session.username}7890`;
-  return `${session.username}7890`; 
-}
+// Helper function getLogicalUsername is now imported from deploymentUtils.ts
 
 export async function POST(request: NextRequest) {
   const session = await validateSession(request);
@@ -22,9 +13,10 @@ export async function POST(request: NextRequest) {
   }
 
   // Always derive targetUsername from the authenticated session for security.
-  const targetUsername = getLogicalUsername(session);
-  if (!targetUsername) {
-      console.error('Logical username for loca.lt could not be determined from session.');
+  // Pass an object { username: session.username } to match the expected signature in deploymentUtils
+  const targetUsername = getLogicalUsername({ username: session.username }); 
+  if (!targetUsername || targetUsername.startsWith('invalid_user_')) { // Check for invalid user marker
+      console.error('Logical username for loca.lt could not be determined from session or session username was missing.');
       return NextResponse.json({ message: 'Configuration error: Unable to determine target username for loca.lt from session.' }, { status: 500 });
   }
 
