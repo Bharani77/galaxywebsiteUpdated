@@ -12,13 +12,11 @@ const ORG = process.env.NEXT_PUBLIC_GITHUB_ORG || 'GalaxyKickLock';
 const REPO = process.env.NEXT_PUBLIC_GITHUB_REPO || 'GalaxyKickPipeline';
 const WORKFLOW_FILE_NAME = process.env.NEXT_PUBLIC_GITHUB_WORKFLOW_FILE || 'blank.yml';
 
-interface ClientSafeRunResponse { // Renamed for clarity
-  runId: number; // Or consider if even runId is needed by client
+interface ClientSafeRunResponse {
+  runId: number; 
   status: string | null;
   conclusion: string | null;
-  // createdAt: string; // Consider if client needs this
-  // htmlUrl: string; // Explicitly removing this
-  jobName: string; // Or just a success/failure indicator?
+  // jobName: string; // Removing this as per request
 }
 
 export async function GET(request: NextRequest) {
@@ -29,7 +27,7 @@ export async function GET(request: NextRequest) {
 
   if (!process.env.GITHUB_TOKEN) {
     console.error('Critical: GitHub token not configured on the server for latest-user-run.');
-    return NextResponse.json({ message: 'Server configuration error: GitHub token missing.' }, { status: 500 });
+    return NextResponse.json({ message: 'Server configuration error: Required integration token missing.' }, { status: 500 });
   }
 
   const searchParams = request.nextUrl.searchParams;
@@ -57,7 +55,9 @@ export async function GET(request: NextRequest) {
 
     const runsResponse = await runsResult.json() as GitHubWorkflowRunsResponse;
     if (!runsResponse.workflow_runs || runsResponse.workflow_runs.length === 0) {
-      return NextResponse.json({ message: `No workflow runs found for ${WORKFLOW_FILE_NAME}.` }, { status: 404 });
+      // WORKFLOW_FILE_NAME might be too specific.
+      console.log(`No workflow runs found for ${WORKFLOW_FILE_NAME} (ORG: ${ORG}, REPO: ${REPO}).`);
+      return NextResponse.json({ message: `No recent background processes found.` }, { status: 404 });
     }
 
     // The runs are already sorted newest first by the GitHub API.
@@ -86,11 +86,10 @@ export async function GET(request: NextRequest) {
           console.log(`Found matching job in run ${run.id}. Job ID: ${matchingJob.id}, Job Name: ${matchingJob.name}, Status: ${run.status}, Conclusion: ${run.conclusion}`);
           // Construct a client-safe response, excluding sensitive URLs or excessive details
           const clientResponsePayload: ClientSafeRunResponse = {
-            runId: run.id, // Client might need this to track a specific run it initiated or is interested in
+            runId: run.id, 
             status: run.status,
             conclusion: run.conclusion,
-            // createdAt: run.created_at, // Decide if client needs this
-            jobName: matchingJob.name, // Client might need to confirm it's the right job
+            // jobName: matchingJob.name, // Removed
           };
           return NextResponse.json(clientResponsePayload, { status: 200 });
         }
@@ -99,7 +98,7 @@ export async function GET(request: NextRequest) {
 
     // If loop completes, no matching run was found
     console.log(`No runs found with a job named "${targetJobName}" after checking all runs.`);
-    return NextResponse.json({ message: `No runs found with a job named "${targetJobName}".` }, { status: 404 });
+    return NextResponse.json({ message: `No matching task found for your request.` }, { status: 404 });
 
   } catch (error: any) {
     console.error('Error in latest-user-run endpoint:', error);

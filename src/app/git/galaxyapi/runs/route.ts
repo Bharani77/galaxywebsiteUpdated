@@ -13,21 +13,21 @@ const ORG = process.env.NEXT_PUBLIC_GITHUB_ORG || 'GalaxyKickLock';
 const REPO = process.env.NEXT_PUBLIC_GITHUB_REPO || 'GalaxyKickPipeline';
 const WORKFLOW_FILE_NAME = process.env.NEXT_PUBLIC_GITHUB_WORKFLOW_FILE || 'blank.yml';
 
-// Simplified types for frontend responses, can be adjusted if GitHubRun/Job are directly usable
-interface SimpleRun {
+// Simplified types for frontend responses
+interface ClientSafeRunDetails { // Renamed for clarity
   id: number;
-  name: string | null;
   status: string | null;
   conclusion: string | null;
-  created_at: string;
-  updated_at: string;
-  html_url: string;
   run_number: number;
+  // name: string | null; // Removing name (often workflow name or commit message)
+  // created_at: string; // Removing timestamp
+  // updated_at: string; // Removing timestamp
+  // html_url: string; // Explicitly removing GitHub URL
 }
 
-interface SimpleJob {
+interface ClientSafeJobDetails { // Renamed for clarity
   id: number;
-  name: string;
+  // name: string; // Removing job name
   status: string;
   conclusion: string | null;
 }
@@ -42,7 +42,7 @@ export async function GET(request: NextRequest) {
   // but good to have a high-level check or ensure it's caught by the util.
   if (!process.env.GITHUB_TOKEN) {
     console.error('Critical: GitHub token not configured on the server.');
-    return NextResponse.json({ message: 'Server configuration error: GitHub token missing.' }, { status: 500 });
+    return NextResponse.json({ message: 'Server configuration error: Required integration token missing.' }, { status: 500 });
   }
 
   const searchParams = request.nextUrl.searchParams;
@@ -56,46 +56,49 @@ export async function GET(request: NextRequest) {
 
   if (runIdParam) {
     endpoint = `/repos/${ORG}/${REPO}/actions/runs/${runIdParam}`;
-    transformFunction = (ghRun: GitHubRun): SimpleRun | null => ghRun ? ({
+    transformFunction = (ghRun: GitHubRun): ClientSafeRunDetails | null => ghRun ? ({
       id: ghRun.id,
-      name: ghRun.name,
       status: ghRun.status,
       conclusion: ghRun.conclusion,
-      created_at: ghRun.created_at,
-      updated_at: ghRun.updated_at,
-      html_url: ghRun.html_url,
       run_number: ghRun.run_number,
+      // name: ghRun.name, // Removed
+      // created_at: ghRun.created_at, // Removed
+      // updated_at: ghRun.updated_at, // Removed
+      // html_url: ghRun.html_url, // Removed
     }) : null;
   } else if (jobsForRunIdParam) {
     // The delay is still relevant if GitHub needs time to populate jobs after a run starts
     await new Promise(resolve => setTimeout(resolve, 5000)); // 5 seconds delay
     endpoint = `/repos/${ORG}/${REPO}/actions/runs/${jobsForRunIdParam}/jobs`;
-    transformFunction = (ghJobsResponse: GitHubRunJobsResponse): { jobs: SimpleJob[] } => ({
+    transformFunction = (ghJobsResponse: GitHubRunJobsResponse): { jobs: ClientSafeJobDetails[] } => ({
       jobs: ghJobsResponse && Array.isArray(ghJobsResponse.jobs) 
         ? ghJobsResponse.jobs.map((job: GitHubJob) => ({
             id: job.id,
-            name: job.name,
+            // name: job.name, // Removed job name
             status: job.status,
             conclusion: job.conclusion,
           }))
         : [],
     });
   } else {
+    // This case lists multiple workflow runs.
     endpoint = `/repos/${ORG}/${REPO}/actions/workflows/${WORKFLOW_FILE_NAME}/runs?per_page=${perPage}`;
     if (workflowStatusFilter) {
       endpoint += `&status=${workflowStatusFilter}`;
     }
-    transformFunction = (ghRunsResponse: GitHubWorkflowRunsResponse): { workflow_runs: SimpleRun[] } => ({
+    // This transformFunction maps to SimpleRun, which we are about to redefine as ClientSafeRunDetails.
+    // So, the list of runs will also be sanitized.
+    transformFunction = (ghRunsResponse: GitHubWorkflowRunsResponse): { workflow_runs: ClientSafeRunDetails[] } => ({
       workflow_runs: ghRunsResponse && Array.isArray(ghRunsResponse.workflow_runs)
         ? ghRunsResponse.workflow_runs.map((run: GitHubRun) => ({
             id: run.id,
-            name: run.name,
             status: run.status,
             conclusion: run.conclusion,
-            created_at: run.created_at,
-            updated_at: run.updated_at,
-            html_url: run.html_url,
             run_number: run.run_number,
+            // name: run.name, // Removed
+            // created_at: run.created_at, // Removed
+            // updated_at: run.updated_at, // Removed
+            // html_url: run.html_url, // Removed
           }))
         : [],
     });
@@ -122,7 +125,7 @@ export async function GET(request: NextRequest) {
       } catch (e) {
         console.error(`Attempt ${attempts}: Failed to parse JSON response from GitHub. Status: ${apiResponse.status}`, e);
         // Treat JSON parse error as a fetch failure for retry purposes
-        apiResponse = NextResponse.json({ message: 'Failed to parse GitHub response.' }, { status: 502 }); // Override apiResponse to indicate error
+        apiResponse = NextResponse.json({ message: 'Failed to parse response from the automation service.' }, { status: 502 }); // Override apiResponse to indicate error
       }
     }
 
@@ -147,7 +150,7 @@ export async function GET(request: NextRequest) {
   if (!apiResponse || !apiResponse.ok) {
     // This case should ideally be caught by the loop's exit conditions (maxAttempts or non-retryable status)
     console.error("All attempts failed to fetch data from GitHub or last attempt was not ok.");
-    return apiResponse || NextResponse.json({ message: 'Failed to fetch data from GitHub after multiple attempts.' }, { status: 500 });
+    return apiResponse || NextResponse.json({ message: 'Failed to fetch data from the automation service after multiple attempts.' }, { status: 500 });
   }
   
   // rawData should be populated if apiResponse.ok was true and JSON parsing succeeded
@@ -163,7 +166,7 @@ export async function POST(request: NextRequest) {
   }
   if (!process.env.GITHUB_TOKEN) {
     console.error('Critical: GitHub token not configured on the server.');
-    return NextResponse.json({ message: 'Server configuration error: GitHub token missing.' }, { status: 500 });
+    return NextResponse.json({ message: 'Server configuration error: Required integration token missing.' }, { status: 500 });
   }
 
   const searchParams = request.nextUrl.searchParams;

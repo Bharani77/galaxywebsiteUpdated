@@ -268,7 +268,7 @@ const getApiAuthHeaders = (): Record<string, string> => {
       if (Date.now() - findRunIdStartTime > findRunIdTimeoutDuration) {
         if (findRunIdTimer !== null) window.clearInterval(findRunIdTimer);
         console.error(`Timeout: Could not find a workflow run with job "${jobNameToFind}" within ${findRunIdTimeoutDuration / 1000}s.`);
-        setDeploymentStatus('Could not locate the triggered workflow run in time. Please check GitHub Actions or try again.');
+        setDeploymentStatus('Could not locate the triggered background process in time. Please check status or try again.');
         setIsPollingStatus(false);
         setRedeployMode(true);
         return;
