@@ -38,27 +38,29 @@ export async function POST(request: NextRequest) {
     // It will preserve existing deployTimestamp and activeFormNumber if they are not passed as null.
     // However, the signature is (userId, timestamp | null, formNum | null, runId | null)
     // To *only* update runId, we'd need to pass the *current* timestamp and formNum.
-    // These are in `session.deployTimestamp` and `session.activeFormNumber`.
+    // When a GitHub run becomes active, this endpoint is called.
+    // We should set the deploy_timestamp to now, and active_form_number to a general value (e.g., 0 or null)
+    // if it represents the main GitHub deployment, not a specific Kick 1-5 service.
+    // For simplicity, let's use null for active_form_number if it's just the main deployment.
+    // The client (GalaxyForm) determines the runId when its main deployment becomes active.
 
-    if (session.deployTimestamp && session.activeFormNumber) {
-      const success = await updateUserDeployStatus(
-        session.userId,
-        session.deployTimestamp, // Pass current timestamp
-        session.activeFormNumber, // Pass current form number
-        runId // The new runId to set
-      );
+    const newDeployTimestamp = new Date().toISOString();
+    // Assuming active_form_number can be null for the main GitHub deployment context
+    // Or use a convention like 0 if null is not appropriate for your DB/logic.
+    // Let's use null for active_form_number to indicate it's the overall deployment.
+    const formNumberForMainDeployment = null; 
 
-      if (success) {
-        return NextResponse.json({ message: 'Active run ID updated successfully.' });
-      } else {
-        return NextResponse.json({ message: 'Failed to update active run ID.' }, { status: 500 });
-      }
+    const success = await updateUserDeployStatus(
+      session.userId,
+      newDeployTimestamp,
+      formNumberForMainDeployment, 
+      runId // The new runId to set
+    );
+
+    if (success) {
+      return NextResponse.json({ message: 'Active deployment details (including run ID) updated successfully.' });
     } else {
-      // This case means a run ID is being set, but there's no active deployment record (timestamp/form number)
-      // This might be an inconsistent state or a specific logic path.
-      // For now, let's assume this is an error or needs specific handling.
-      console.warn(`User ${session.userId} trying to set runId ${runId} but no active deployTimestamp/activeFormNumber in session.`);
-      return NextResponse.json({ message: 'Cannot set run ID without an active deployment record (timestamp/form number missing from session).' }, { status: 409 });
+      return NextResponse.json({ message: 'Failed to update active deployment details.' }, { status: 500 });
     }
 
   } catch (error: any) {
