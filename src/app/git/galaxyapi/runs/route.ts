@@ -1,64 +1,19 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { validateSession } from '@/lib/auth'; // Assuming @/ is configured for src/
+import { validateSession } from '@/lib/auth';
+import { 
+  fetchFromGitHub, 
+  GitHubRun, 
+  GitHubJob,
+  GitHubWorkflowRunsResponse,
+  GitHubRunJobsResponse
+} from '@/lib/githubApiUtils';
 
-const GITHUB_TOKEN = process.env.GITHUB_TOKEN; // Server-side environment variable
+// Environment variables will be read by githubApiUtils or passed if needed
 const ORG = process.env.NEXT_PUBLIC_GITHUB_ORG || 'GalaxyKickLock';
 const REPO = process.env.NEXT_PUBLIC_GITHUB_REPO || 'GalaxyKickPipeline';
 const WORKFLOW_FILE_NAME = process.env.NEXT_PUBLIC_GITHUB_WORKFLOW_FILE || 'blank.yml';
 
-const apiHeaders = {
-  'Accept': 'application/vnd.github+json',
-  'Authorization': `token ${GITHUB_TOKEN}`,
-  'X-GitHub-Api-Version': '2022-11-28',
-};
-
-async function fetchFromGitHub(url: string, options: RequestInit = {}) {
-  // GITHUB_TOKEN check is now part of the main handlers after session validation
-  // if (!GITHUB_TOKEN) {
-  //   console.error('GitHub token not configured on the server.');
-  //   return NextResponse.json({ message: 'Server configuration error: GitHub token missing.' }, { status: 500 });
-  // }
-  
-  const response = await fetch(url, { ...options, headers: { ...apiHeaders, ...options.headers } });
-  
-  if (!response.ok) {
-    // Handle error responses from GitHub
-    const errorData = await response.text();
-    console.error(`GitHub API error: ${response.status} for URL ${url}`, errorData);
-    try {
-      const jsonData = JSON.parse(errorData);
-      return NextResponse.json({ message: `GitHub API Error: ${response.status}`, error: jsonData }, { status: response.status });
-    } catch (e) {
-      return NextResponse.json({ message: `GitHub API Error: ${response.status}`, error: errorData }, { status: response.status });
-    }
-  }
-  
-  // Handle successful responses
-  // For the 'cancel' POST request, GitHub returns 202 Accepted.
-  if (options.method === 'POST' && response.status === 202) {
-    return NextResponse.json({ message: 'Cancel request accepted by GitHub.' }, { status: 202 });
-  }
-
-  // For GET requests that might return no content (e.g. an empty list of runs for a workflow)
-  // GitHub usually returns 200 with an empty array/object, not 204 for list endpoints.
-  // A specific GET for a resource that doesn't exist would be a 404 (handled by !response.ok).
-  // If a GET endpoint *could* return 204, this handles it by providing null data.
-  if (response.status === 204) {
-    return NextResponse.json(null, { status: 204 });
-  }
-  
-  // For other successful GETs (typically 200 with data)
-  try {
-    const rawData = await response.json();
-    return NextResponse.json({ rawData, status: response.status, ok: true }, { status: response.status });
-  } catch (e: any) {
-    // If response.json() fails (e.g. empty body but status 200, or malformed JSON from GitHub)
-    console.error(`Failed to parse JSON response from GitHub for URL ${url}. Status: ${response.status}`, e.message);
-    return NextResponse.json({ message: 'Failed to parse response from GitHub.' }, { status: 502 }); // Bad Gateway
-  }
-}
-
-// Define simplified types for frontend responses
+// Simplified types for frontend responses, can be adjusted if GitHubRun/Job are directly usable
 interface SimpleRun {
   id: number;
   name: string | null;
@@ -68,7 +23,6 @@ interface SimpleRun {
   updated_at: string;
   html_url: string;
   run_number: number;
-  // jobs_url is intentionally omitted, client will use jobsForRunId query
 }
 
 interface SimpleJob {
@@ -84,8 +38,10 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ message: 'Authentication required.' }, { status: 401 });
   }
 
-  if (!GITHUB_TOKEN) {
-    console.error('GitHub token not configured on the server.');
+  // GITHUB_TOKEN check is handled by fetchFromGitHub via getGitHubApiHeaders
+  // but good to have a high-level check or ensure it's caught by the util.
+  if (!process.env.GITHUB_TOKEN) {
+    console.error('Critical: GitHub token not configured on the server.');
     return NextResponse.json({ message: 'Server configuration error: GitHub token missing.' }, { status: 500 });
   }
 
@@ -93,111 +49,111 @@ export async function GET(request: NextRequest) {
   const runIdParam = searchParams.get('runId');
   const jobsForRunIdParam = searchParams.get('jobsForRunId');
   const workflowStatusFilter = searchParams.get('status');
-  const perPage = searchParams.get('per_page') || '30';
+  const perPage = searchParams.get('per_page') || '30'; // Default to 30, can be overridden
 
-  let urlToFetch: string;
-  let transformFunction: (data: any) => any;
+  let endpoint: string;
+  let transformFunction: (data: any) => any; // Keep transform function for now
 
   if (runIdParam) {
-    urlToFetch = `https://api.github.com/repos/${ORG}/${REPO}/actions/runs/${runIdParam}`;
-    transformFunction = (data: any): SimpleRun | null => data ? ({
-      id: data.id,
-      name: data.name,
-      status: data.status,
-      conclusion: data.conclusion,
-      created_at: data.created_at,
-      updated_at: data.updated_at,
-      html_url: data.html_url,
-      run_number: data.run_number,
+    endpoint = `/repos/${ORG}/${REPO}/actions/runs/${runIdParam}`;
+    transformFunction = (ghRun: GitHubRun): SimpleRun | null => ghRun ? ({
+      id: ghRun.id,
+      name: ghRun.name,
+      status: ghRun.status,
+      conclusion: ghRun.conclusion,
+      created_at: ghRun.created_at,
+      updated_at: ghRun.updated_at,
+      html_url: ghRun.html_url,
+      run_number: ghRun.run_number,
     }) : null;
   } else if (jobsForRunIdParam) {
-    // Introduce a delay to allow GitHub to populate the jobs
-    await new Promise(resolve => setTimeout(resolve, 5000)); // 5 seconds
-    urlToFetch = `https://api.github.com/repos/${ORG}/${REPO}/actions/runs/${jobsForRunIdParam}/jobs`;
-    transformFunction = (data: any): { jobs: SimpleJob[] } | null => data && Array.isArray(data.jobs) ? ({
-      jobs: data.jobs.map((job: any) => ({
-        id: job.id,
-        name: job.name,
-        status: job.status,
-        conclusion: job.conclusion,
-      })),
-    }) : { jobs: [] };
+    // The delay is still relevant if GitHub needs time to populate jobs after a run starts
+    await new Promise(resolve => setTimeout(resolve, 5000)); // 5 seconds delay
+    endpoint = `/repos/${ORG}/${REPO}/actions/runs/${jobsForRunIdParam}/jobs`;
+    transformFunction = (ghJobsResponse: GitHubRunJobsResponse): { jobs: SimpleJob[] } => ({
+      jobs: ghJobsResponse && Array.isArray(ghJobsResponse.jobs) 
+        ? ghJobsResponse.jobs.map((job: GitHubJob) => ({
+            id: job.id,
+            name: job.name,
+            status: job.status,
+            conclusion: job.conclusion,
+          }))
+        : [],
+    });
   } else {
-    urlToFetch = `https://api.github.com/repos/${ORG}/${REPO}/actions/workflows/${WORKFLOW_FILE_NAME}/runs?per_page=${perPage}`;
+    endpoint = `/repos/${ORG}/${REPO}/actions/workflows/${WORKFLOW_FILE_NAME}/runs?per_page=${perPage}`;
     if (workflowStatusFilter) {
-      urlToFetch += `&status=${workflowStatusFilter}`;
+      endpoint += `&status=${workflowStatusFilter}`;
     }
-    transformFunction = (data: any): { workflow_runs: SimpleRun[] } | null => data && Array.isArray(data.workflow_runs) ? ({
-      workflow_runs: data.workflow_runs.map((run: any) => ({
-        id: run.id,
-        name: run.name,
-        status: run.status,
-        conclusion: run.conclusion,
-        created_at: run.created_at,
-        updated_at: run.updated_at,
-        html_url: run.html_url,
-        run_number: run.run_number,
-      })),
-    }) : { workflow_runs: [] };
+    transformFunction = (ghRunsResponse: GitHubWorkflowRunsResponse): { workflow_runs: SimpleRun[] } => ({
+      workflow_runs: ghRunsResponse && Array.isArray(ghRunsResponse.workflow_runs)
+        ? ghRunsResponse.workflow_runs.map((run: GitHubRun) => ({
+            id: run.id,
+            name: run.name,
+            status: run.status,
+            conclusion: run.conclusion,
+            created_at: run.created_at,
+            updated_at: run.updated_at,
+            html_url: run.html_url,
+            run_number: run.run_number,
+          }))
+        : [],
+    });
   }
 
+  // Retry logic can be simplified or made part of fetchFromGitHub if it's a common pattern
+  // For now, keeping it here to illustrate the change.
   let result: any;
   let attempts = 0;
-  const maxAttempts = 5;
-  const retryInterval = 25000; // 25 seconds
+  const maxAttempts = 3; // Reduced max attempts for brevity, adjust as needed
+  const retryInterval = 10000; // 10 seconds
 
   do {
-    result = await fetchFromGitHub(urlToFetch);
+    result = await fetchFromGitHub(endpoint); // Pass only the endpoint
     attempts++;
 
-    // If fetchFromGitHub returned a NextResponse, it's an error response
-    // or a specific non-GET success response that it decided to handle fully.
-    if (result instanceof NextResponse) {
-      // If it's the last attempt, return the error response
-      if (attempts >= maxAttempts) {
+    if (result instanceof NextResponse) { // Error or specific handled response from fetchFromGitHub
+      if (attempts >= maxAttempts || result.status !== 500 && result.status !== 502 && result.status !== 503 && result.status !== 504) { // Non-retryable or max attempts
         return result;
       }
-      // Wait before retrying
+      console.log(`Attempt ${attempts} failed with status ${result.status}. Retrying in ${retryInterval / 1000}s...`);
       await new Promise(resolve => setTimeout(resolve, retryInterval));
-      continue; // Skip further processing and retry
+      continue;
+    }
+    
+    // Check if the structure is { rawData: any, status: number, ok: boolean }
+    if (typeof result === 'object' && result !== null && 'ok' in result && 'rawData' in result) {
+        if (result.ok) break; // Successful fetch
+        
+        // If not ok, but not a NextResponse, it's an internal error from fetchFromGitHub (e.g., JSON parse error)
+        // or a GitHub error that wasn't wrapped in NextResponse (shouldn't happen with current util)
+        if (attempts >= maxAttempts) {
+            return NextResponse.json({ message: result.error || 'Failed after multiple attempts.' }, { status: result.status || 500 });
+        }
+    } else {
+        // Unexpected result format
+        if (attempts >= maxAttempts) {
+            console.error("Unexpected result from fetchFromGitHub:", result);
+            return NextResponse.json({ message: 'Unexpected response from GitHub utility.' }, { status: 500 });
+        }
     }
 
-    // Break the loop if the result is successful
-    break;
+    console.log(`Attempt ${attempts} resulted in an issue. Retrying in ${retryInterval / 1000}s...`);
+    await new Promise(resolve => setTimeout(resolve, retryInterval));
+
   } while (attempts < maxAttempts);
 
-  // If all attempts failed, return an error
-  if (attempts >= maxAttempts && result instanceof NextResponse) {
-    return result;
-  }
-
-  // If fetchFromGitHub returned a NextResponse, it's an error response
-  // or a specific non-GET success response that it decided to handle fully.
-  if (result instanceof NextResponse) {
-    return result;
-  }
-
-  // At this point, result MUST be of type { rawData: any; status: number; ok: boolean; }
-  // and result.ok should be true.
-  let resultAny: any = result;
-  
-  if (resultAny instanceof NextResponse) {
-    return resultAny;
-  }
-
-  // At this point, result MUST be of type { rawData: any; status: number; ok: boolean; }
-  // and result.ok should be true.
-  if (!resultAny.rawData.ok) {
-    // This case should ideally not be hit if fetchFromGitHub's logic for ok:true is sound,
-    // but as a safeguard if ok somehow became false without returning a NextResponse.
-    console.error("fetchFromGitHub returned ok:false without a NextResponse:", result);
-    return NextResponse.json({ message: 'Internal error processing GitHub data (unexpected ok:false).' }, { status: 500 });
+  if (!(typeof result === 'object' && result !== null && result.ok && 'rawData' in result)) {
+    // All attempts failed or last attempt yielded non-ok result not handled above
+    console.error("Final attempt failed or yielded unexpected structure:", result);
+    const message = (typeof result === 'object' && result !== null && 'error' in result) ? result.error : 'Failed to fetch data from GitHub after multiple attempts.';
+    const status = (typeof result === 'object' && result !== null && 'status' in result) ? result.status : 500;
+    return NextResponse.json({ message }, { status });
   }
   
   // result.rawData could be null if GitHub returned 204 and fetchFromGitHub passed it as such.
-  // The transformFunctions are expected to handle null rawData gracefully.
-  const transformedData = transformFunction(resultAny.rawData);
-  return NextResponse.json(transformedData, { status: resultAny.rawData.status });
+  const transformedData = transformFunction(result.rawData);
+  return NextResponse.json(transformedData, { status: result.status });
 }
 
 export async function POST(request: NextRequest) {
@@ -205,9 +161,8 @@ export async function POST(request: NextRequest) {
   if (!session) {
     return NextResponse.json({ message: 'Authentication required.' }, { status: 401 });
   }
-
-  if (!GITHUB_TOKEN) {
-    console.error('GitHub token not configured on the server.');
+  if (!process.env.GITHUB_TOKEN) {
+    console.error('Critical: GitHub token not configured on the server.');
     return NextResponse.json({ message: 'Server configuration error: GitHub token missing.' }, { status: 500 });
   }
 
@@ -215,13 +170,11 @@ export async function POST(request: NextRequest) {
   const cancelRunId = searchParams.get('cancelRunId');
 
   if (cancelRunId) {
-    const url = `https://api.github.com/repos/${ORG}/${REPO}/actions/runs/${cancelRunId}/cancel`;
-    // For POST actions like cancel, we might not need to transform the response significantly
-    // GitHub returns 202 Accepted for a successful cancel request.
-    // Our fetchFromGitHub will return a NextResponse for this.
-    const cancelAttemptResponse = await fetchFromGitHub(url, { method: 'POST' });
+    const endpoint = `/repos/${ORG}/${REPO}/actions/runs/${cancelRunId}/cancel`;
+    const cancelAttemptResponse = await fetchFromGitHub(endpoint, { method: 'POST' });
     
-    // Pass through the response from fetchFromGitHub (should be a NextResponse)
+    // fetchFromGitHub now returns a NextResponse directly for POSTs that it handles (like 202)
+    // or for errors.
     return cancelAttemptResponse;
   }
 

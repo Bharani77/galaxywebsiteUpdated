@@ -37,6 +37,7 @@ const initialButtonStates: ButtonStates = {
 
 const GalaxyForm: React.FC = () => {
   const router = useRouter();
+  const [isClient, setIsClient] = useState(false);
   const [activeTab, setActiveTab] = useState<number>(1);
   const [username, setUsername] = useState<string | null>(null); 
   const [displayedUsername, setDisplayedUsername] = useState<string | null>(null);
@@ -51,6 +52,16 @@ const GalaxyForm: React.FC = () => {
   const [activationProgressTimerId, setActivationProgressTimerId] = useState<number | null>(null);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
   const [activationProgressPercent, setActivationProgressPercent] = useState<number>(0);
+
+// Interface for the response from /api/git/latest-user-run
+interface LatestUserRunResponse {
+  runId: number;
+  status: string | null;
+  conclusion: string | null;
+  createdAt: string;
+  htmlUrl: string;
+  jobName: string;
+}
 
 const getApiAuthHeaders = (): Record<string, string> => {
   const headers: Record<string, string> = {
@@ -97,71 +108,71 @@ const getApiAuthHeaders = (): Record<string, string> => {
   };
 
   const checkInitialDeploymentStatus = async (logicalUsername: string) => {
-    const jobNameToFind = `Run for ${logicalUsername}`;
-    let isActiveRunFound = false;
-    console.log(`Checking initial deployment status for: ${jobNameToFind}`);
-  
+    setDeploymentStatus('Checking deployment status...');
+    // setShowDeployPopup(true); // Keep this if you want the popup visible during check
+
     try {
       const authHeaders = getApiAuthHeaders();
-      if (!authHeaders['Authorization']) { // Check if essential auth headers are missing
+      if (!authHeaders['Authorization']) {
         setDeploymentStatus('Authentication details missing. Please sign in again.');
         setIsDeployed(false);
         setShowDeployPopup(true);
         return;
       }
-      // Fetching fewer runs (e.g., 5 instead of 10) to speed up initial check for common cases.
-      const runsResponse = await fetch(`/git/galaxyapi/runs?status=in_progress&per_page=5`, { headers: authHeaders });
-      if (runsResponse.ok) {
-       const runsData = await runsResponse.json();
-       const workflowRuns = runsData.rawData?.workflow_runs || runsData;
-       if (!Array.isArray(workflowRuns)) {
-         console.error("Invalid runs data received from backend:", workflowRuns);
-         setIsDeployed(false);
-          setShowDeployPopup(true);
-          setDeploymentStatus('Error fetching deployment status.');
-          return;
-        }
-        const sortedRuns = workflowRuns.sort((a: any, b: any) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
-        console.log("Sorted runs (checkInitialDeploymentStatus):", sortedRuns.slice(0, 3).map((run: any) => ({ id: run.id, created_at: run.created_at })));
-  
-        for (const run of sortedRuns) {
-         const jobsResponse = await fetch(`/git/galaxyapi/runs?jobsForRunId=${run.id}`, { headers: authHeaders });
-          if (jobsResponse.ok) {
-            const jobsData = await jobsResponse.json();
-            if (jobsData.jobs && jobsData.jobs.find((job: any) => job.name === jobNameToFind)) {
-              isActiveRunFound = true;
-              console.log(`Active deployment found on page load (Run ID: ${run.id}).`);
-              setIsDeployed(true);
-              setShowDeployPopup(false); 
-              setDeploymentStatus(`Active deployment detected (Run ID: ${run.id}).`);
-              break;
-            }
-          } else {
-            console.warn(`Failed to fetch jobs for run ${run.id} from backend:`, await jobsResponse.text());
-          }
-        }
-      } else {
-        const errorText = await runsResponse.text();
-        console.error("Failed to fetch initial runs status from backend:", errorText);
-        if (runsResponse.status === 401) {
-            setDeploymentStatus('Authentication error. Please sign in again.');
+
+      console.log(`Fetching latest run status for: ${logicalUsername} via new endpoint.`);
+      const response = await fetch(`/api/git/latest-user-run?logicalUsername=${logicalUsername}`, { headers: authHeaders });
+
+      if (response.ok) {
+        const data = await response.json() as LatestUserRunResponse;
+        
+        // An active deployment is typically 'in_progress' or 'queued'
+        // You might also consider 'requested' or 'waiting' if your workflow uses them.
+        const isActiveStatus = data.status === 'in_progress' || data.status === 'queued';
+
+        if (isActiveStatus) {
+          console.log(`Active deployment found via new endpoint (Run ID: ${data.runId}, Status: ${data.status}).`);
+          setIsDeployed(true);
+          setShowDeployPopup(false); // Hide popup as deployment is active and confirmed
+          setDeploymentStatus(`Active deployment detected (Run ID: ${data.runId}, Status: ${data.status}).`);
         } else {
-            setDeploymentStatus('Could not check deployment status. See console for details.');
+          // A run was found, but it's not in a typically "active" state.
+          // It could be completed, cancelled, failed, etc.
+          console.log(`Latest run for user found (Run ID: ${data.runId}, Status: ${data.status}, Conclusion: ${data.conclusion}), but it's not currently active.`);
+          setIsDeployed(false);
+          setShowDeployPopup(true); // Show popup because deployment is not active
+          setDeploymentStatus(`Deployment not active. Latest run: ${data.status} (Conclusion: ${data.conclusion || 'N/A'}). Redeploy if needed.`);
         }
+      } else if (response.status === 404) {
+        // No run found for this user by the new API
+        console.log(`No run found for user ${logicalUsername} via new endpoint.`);
+        setIsDeployed(false);
+        setShowDeployPopup(true);
+        setDeploymentStatus('No deployment found for your user. Deployment is required.');
+      } else {
+        // Other errors (e.g., 401, 500 from the new API)
+        const errorData = await response.json();
+        console.error("Failed to check initial deployment status via new endpoint:", errorData.message || response.statusText);
+        setDeploymentStatus(`Error checking status: ${errorData.message || 'Please try again.'}`);
+        setIsDeployed(false);
+        setShowDeployPopup(true);
       }
     } catch (error) {
-      console.error("Error checking initial deployment status:", error);
-      setDeploymentStatus('Error connecting to backend for status check.');
-    }
-  
-    if (!isActiveRunFound) {
+      console.error("Error calling /api/git/latest-user-run:", error);
+      setDeploymentStatus('Error connecting for status check. Please try again.');
       setIsDeployed(false);
       setShowDeployPopup(true);
-      setDeploymentStatus('Deployment is required to use KickLock features.');
     }
   };
 
   useEffect(() => {
+    setIsClient(true);
+  }, []);
+
+  useEffect(() => {
+    if (!isClient) {
+      return; // Don't run on server or initial client render
+    }
     const storedUsername = sessionStorage.getItem('username');
     if (storedUsername) {
       setDisplayedUsername(storedUsername);
@@ -183,7 +194,7 @@ const getApiAuthHeaders = (): Record<string, string> => {
         window.clearInterval(activationProgressTimerId);
       }
     };
-  }, [router]);
+  }, [router, isClient]); // Added isClient to dependency array
 
   const startDeploymentCheck = async (currentLogicalUsername: string | null) => {
     if (!currentLogicalUsername) {
@@ -206,7 +217,7 @@ const getApiAuthHeaders = (): Record<string, string> => {
     const findRunIdTimeoutDuration = 30 * 1000;
     const findRunIdInterval = 5 * 1000;
     const findRunIdStartTime = Date.now();
-    let findRunIdTimer: number | null = null;
+    let findRunIdTimer: number | null = null; // Timer for retries
 
     const authHeaders = getApiAuthHeaders();
     if (!authHeaders['Authorization']) {
@@ -216,98 +227,69 @@ const getApiAuthHeaders = (): Record<string, string> => {
       return;
     }
 
+    // This function will now use the new endpoint and include retry logic.
     const attemptToFindRunId = async () => {
-      console.log('Attempting to find workflow run ID...');
-      if (Date.now() - findRunIdStartTime <= findRunIdTimeoutDuration && !foundRunId) {
-        setDeploymentStatus(`Locating workflow run (attempt ${Math.floor((Date.now() - findRunIdStartTime) / findRunIdInterval) + 1})...`);
-      }
+      console.log(`Attempting to find workflow run ID for "${jobNameToFind}" using new endpoint.`);
+      
+      // Update status message for the user
+      const attemptNumber = Math.floor((Date.now() - findRunIdStartTime) / findRunIdInterval) + 1;
+      setDeploymentStatus(`Locating workflow run (attempt ${attemptNumber})...`);
 
       if (Date.now() - findRunIdStartTime > findRunIdTimeoutDuration) {
         if (findRunIdTimer !== null) window.clearInterval(findRunIdTimer);
-        if (!foundRunId) { 
-          console.error(`Timeout: Could not find a workflow run with job "${jobNameToFind}" within ${findRunIdTimeoutDuration / 1000} seconds.`);
-          setDeploymentStatus('Could not locate the triggered workflow run in time. Please check GitHub Actions or try again.');
-          setIsPollingStatus(false);
-          setRedeployMode(true);
-        }
+        console.error(`Timeout: Could not find a workflow run with job "${jobNameToFind}" within ${findRunIdTimeoutDuration / 1000} seconds using new endpoint.`);
+        setDeploymentStatus('Could not locate the triggered workflow run in time. Please check GitHub Actions or try again.');
+        setIsPollingStatus(false);
+        setRedeployMode(true);
         return;
       }
 
       try {
-        const runsResponse = await fetch(`/git/galaxyapi/runs?per_page=30`, { headers: authHeaders });
-        if (!runsResponse.ok) {
-          const errorText = await runsResponse.text();
-          const errorData = JSON.parse(errorText || "{}");
-          throw new Error(`Failed to fetch workflow runs from backend: ${runsResponse.status} ${errorData.message || errorText}`);
-        }
-        const runsData = await runsResponse.json();
-        const workflowRuns = runsData.rawData?.workflow_runs || runsData;
-         if (!Array.isArray(workflowRuns)) {
-          console.error("Invalid runs data received from backend:", workflowRuns);
-          throw new Error('Invalid runs data from backend.');
-        }
-        const sortedRuns = workflowRuns.sort((a: any, b: any) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
-        console.log("Sorted runs (startDeploymentCheck):", sortedRuns.slice(0, 3).map((run: any) => ({ id: run.id, created_at: run.created_at })));
-        console.log(`Fetched ${sortedRuns.length} runs in current attempt from backend.`);
-  
-        for (const run of sortedRuns) {
-         console.log(`Checking run ID: ${run.id}, Created: ${run.created_at}, Status: ${run.status}, URL: ${run.html_url}`);
+        const response = await fetch(`/api/git/latest-user-run?logicalUsername=${currentLogicalUsername}`, { headers: authHeaders });
 
-         let jobsData = null;
-         let maxRetries = 3;
-         for (let i = 0; i < maxRetries; i++) {
-           const jobsResponse = await fetch(`/git/galaxyapi/runs?jobsForRunId=${run.id}`, { headers: authHeaders });
-           if (jobsResponse.ok) {
-             jobsData = await jobsResponse.json();
-             if (jobsData?.jobs?.length > 0) {
-               console.log(`Successfully fetched jobs for run ${run.id} on attempt ${i + 1}`);
-               break;
-             } else {
-               console.log(`No jobs listed for run ${run.id} on attempt ${i + 1}. Retrying...`);
-             }
-           } else {
-             console.warn(`Failed to fetch jobs for run ${run.id} from backend on attempt ${i + 1}. Status: ${jobsResponse.status}`);
-           }
-           await new Promise(resolve => setTimeout(resolve, 1000));
-         }
-
-         if (jobsData?.jobs?.length > 0) {
-           console.log(`Jobs for run ${run.id}:`, jobsData.jobs.map((j: any) => j.name));
-           const matchingJob = jobsData.jobs.find((job: any) => job.name === jobNameToFind);
-           if (matchingJob) {
-             console.log(`Found matching job "${matchingJob.name}" in run ${run.id}.`);
-             foundRunId = run.id;
-             break;
-           }
-         } else {
-           console.warn(`Failed to fetch jobs for run ${run.id} after multiple retries.`);
-         }
-       }
-
-        if (foundRunId) { 
-          if (findRunIdTimer !== null) window.clearInterval(findRunIdTimer);
-          console.log(`Successfully found run ID: ${foundRunId}. Proceeding to status polling.`); 
-          pollRunStatus(foundRunId); 
-        } else {
-           if (Date.now() - findRunIdStartTime <= findRunIdTimeoutDuration - findRunIdInterval) {
-             console.log(`Run ID not found in this attempt. Retrying in ${findRunIdInterval / 1000}s...`);
-             findRunIdTimer = window.setTimeout(attemptToFindRunId, findRunIdInterval);
-           } else if (Date.now() - findRunIdStartTime <= findRunIdTimeoutDuration) {
-            findRunIdTimer = window.setTimeout(attemptToFindRunId, 1000); 
-           } else { 
+        if (response.ok) {
+          const data = await response.json() as LatestUserRunResponse;
+          // The new endpoint directly gives us the run associated with the user.
+          // We assume if it's found, it's the one we're looking for post-dispatch.
+          // The jobName in data.jobName should match `jobNameToFind`.
+          if (data.runId && data.jobName === jobNameToFind) {
             if (findRunIdTimer !== null) window.clearInterval(findRunIdTimer);
-            console.error(`Final check failed or timeout race: Could not find a workflow run with job "${jobNameToFind}".`);
-            setDeploymentStatus('Could not locate the triggered workflow run. Please check workflow configuration.');
-            setIsPollingStatus(false);
-            setRedeployMode(true);
-           }
+            console.log(`Successfully found run ID: ${data.runId} for job "${data.jobName}" via new endpoint. Proceeding to status polling.`);
+            pollRunStatus(data.runId); // Proceed to poll this run's status
+          } else {
+            // This case should be rare if the backend logic is correct and a run was dispatched.
+            // It might mean the job name didn't match or runId was missing.
+            console.warn(`New endpoint returned a run, but job name "${data.jobName}" or runId was unexpected.`);
+            throw new Error('Mismatch in run data from new endpoint.');
+          }
+        } else if (response.status === 404) {
+          // No run found for this user yet. This is expected if the workflow hasn't fully initialized.
+          console.log(`Run for "${jobNameToFind}" not yet found via new endpoint (404). Retrying...`);
+          if (Date.now() - findRunIdStartTime <= findRunIdTimeoutDuration - findRunIdInterval) {
+            findRunIdTimer = window.setTimeout(attemptToFindRunId, findRunIdInterval);
+          } else { // Last chance before timeout
+             findRunIdTimer = window.setTimeout(attemptToFindRunId, 1000);
+          }
+        } else {
+          // Other errors from the new API
+          const errorData = await response.json();
+          throw new Error(`Failed to find run via new endpoint: ${response.status} ${errorData.message || ''}`);
         }
       } catch (error) {
-        console.error('Error during attemptToFindRunId:', error);
-        setDeploymentStatus(`Error while trying to find workflow run: ${error instanceof Error ? error.message : String(error)}`);
-        if (findRunIdTimer !== null) window.clearInterval(findRunIdTimer);
-        setIsPollingStatus(false);
-        setRedeployMode(true);
+        console.error('Error during attemptToFindRunId (new endpoint):', error);
+        // If it's not the timeout, and there's still time, retry.
+        if (Date.now() - findRunIdStartTime <= findRunIdTimeoutDuration - findRunIdInterval) {
+            console.log(`Error occurred. Retrying in ${findRunIdInterval / 1000}s...`);
+            findRunIdTimer = window.setTimeout(attemptToFindRunId, findRunIdInterval);
+        } else if (Date.now() - findRunIdStartTime <= findRunIdTimeoutDuration) {
+            // Allow one last attempt if error occurs near timeout
+            findRunIdTimer = window.setTimeout(attemptToFindRunId, 1000);
+        } else {
+            if (findRunIdTimer !== null) window.clearInterval(findRunIdTimer);
+            setDeploymentStatus(`Error while trying to find workflow run: ${error instanceof Error ? error.message : String(error)}`);
+            setIsPollingStatus(false);
+            setRedeployMode(true);
+        }
       }
     };
 
@@ -477,11 +459,11 @@ const getApiAuthHeaders = (): Record<string, string> => {
     setButtonStates5(initialButtonStates);
     setError1([]); setError2([]); setError3([]); setError4([]); setError5([]);
 
-    setIsUndeploying(true); 
-    setShowDeployPopup(true); 
+    setIsUndeploying(true);
+    setShowDeployPopup(true);
     setDeploymentStatus('Attempting to cancel current deployment...');
 
-    const jobNameToFind = `Run for ${username}`;
+    // const jobNameToFind = `Run for ${username}`; // Not strictly needed here if new endpoint confirms job name
     let runIdToCancel: number | null = null;
     const authHeaders = getApiAuthHeaders();
 
@@ -493,63 +475,66 @@ const getApiAuthHeaders = (): Record<string, string> => {
     }
 
     try {
-      console.log(`handleUndeploy: Looking for in-progress runs for job "${jobNameToFind}"`);
-      const runsResponse = await fetch(`/git/galaxyapi/runs?status=in_progress`, { headers: authHeaders });
-      if (!runsResponse.ok) {
-        const errorText = await runsResponse.text();
-        console.error(`handleUndeploy: Failed to fetch in-progress runs from backend. Status: ${runsResponse.status}`, errorText);
-        throw new Error('Failed to fetch in-progress runs for undeploy from backend.');
-      }
-      
-      const runsData = await runsResponse.json();
-      const workflowRuns = runsData.rawData?.workflow_runs || runsData;
-      if (!Array.isArray(workflowRuns)) {
-       console.error("Invalid runs data received from backend for undeploy:", workflowRuns);
-       throw new Error('Invalid runs data from backend for undeploy.');
-      }
-      const sortedRuns = workflowRuns.sort((a: any, b: any) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
-      console.log(`handleUndeploy: Found ${sortedRuns.length} in-progress runs from backend.`);
+      console.log(`handleUndeploy: Fetching latest run for user "${username}" to check if it's active and can be cancelled.`);
+      const latestRunResponse = await fetch(`/api/git/latest-user-run?logicalUsername=${username}`, { headers: authHeaders });
 
-      for (const run of sortedRuns) {
-        console.log(`handleUndeploy: Checking run ID ${run.id}`);
-        const jobsResponse = await fetch(`/git/galaxyapi/runs?jobsForRunId=${run.id}`, { headers: authHeaders });
-        if (jobsResponse.ok) {
-          const jobsData = await jobsResponse.json();
-          if (jobsData.jobs && jobsData.jobs.find((job: any) => job.name === jobNameToFind)) {
-            console.log(`handleUndeploy: Found matching run ID ${run.id} to cancel.`);
-            runIdToCancel = run.id;
-            break;
-          }
+      if (latestRunResponse.ok) {
+        const latestRunData = await latestRunResponse.json() as LatestUserRunResponse;
+        
+        // Check if this latest run is indeed 'in_progress' or another active, cancellable state
+        if (latestRunData.status === 'in_progress' || latestRunData.status === 'queued' || latestRunData.status === 'waiting') {
+          runIdToCancel = latestRunData.runId;
+          console.log(`handleUndeploy: Found active run ID ${runIdToCancel} (Status: ${latestRunData.status}) for user "${username}". Attempting to cancel.`);
         } else {
-          console.warn(`handleUndeploy: Failed to fetch jobs for run ${run.id} from backend. Status: ${jobsResponse.status}`);
+          setDeploymentStatus(`No active (in_progress/queued) deployment found for user "${username}" to cancel. Latest run status: ${latestRunData.status}.`);
+          console.log(`handleUndeploy: Latest run for user "${username}" is ${latestRunData.status}, not cancellable.`);
+          setIsUndeploying(false);
+          setIsDeployed(false); // If it wasn't active, reflect that
+          setRedeployMode(false);
+          setShowDeployPopup(true);
+          return;
         }
-      }
-
-      if (!runIdToCancel) {
-        setDeploymentStatus('No active deployment found for your user to cancel.');
-        console.log('handleUndeploy: No active run found to cancel.');
+      } else if (latestRunResponse.status === 404) {
+        setDeploymentStatus('No deployment found for your user to cancel.');
+        console.log(`handleUndeploy: No run found for user "${username}" via new endpoint.`);
         setIsUndeploying(false);
         setIsDeployed(false);
-        setRedeployMode(false); 
-        setShowDeployPopup(true); 
+        setRedeployMode(false);
+        setShowDeployPopup(true);
         return;
+      } else {
+        // Other errors from /api/git/latest-user-run
+        const errorText = await latestRunResponse.text();
+        console.error(`handleUndeploy: Failed to fetch latest run for user. Status: ${latestRunResponse.status}`, errorText);
+        throw new Error(`Failed to fetch latest run for undeploy: ${latestRunResponse.status} ${errorText}`);
       }
 
-      console.log(`handleUndeploy: Attempting to cancel run ID ${runIdToCancel} via backend`);
+      // If runIdToCancel is still null here, it means no active run was found.
+      // This should be caught by the conditions above, but as a safeguard:
+      if (!runIdToCancel) {
+         setDeploymentStatus('No active deployment eligible for cancellation was found.');
+         console.log('handleUndeploy: Safeguard - runIdToCancel is null after checks.');
+         setIsUndeploying(false);
+         setIsDeployed(false);
+         setShowDeployPopup(true);
+         return;
+      }
+
+      console.log(`handleUndeploy: Attempting to cancel run ID ${runIdToCancel} via backend POST to /git/galaxyapi/runs`);
       const cancelResponse = await fetch(`/git/galaxyapi/runs?cancelRunId=${runIdToCancel}`, {
         method: 'POST',
-        headers: authHeaders, 
+        headers: authHeaders,
       });
 
-      if (cancelResponse.status === 202) { 
+      if (cancelResponse.status === 202) {
         setDeploymentStatus(`Cancellation request sent for run ${runIdToCancel}. Monitoring...`);
-        console.log(`handleUndeploy: Cancellation request for ${runIdToCancel} accepted (202) via backend. Starting poll.`);
-        pollForCancelledStatus(runIdToCancel); 
+        console.log(`handleUndeploy: Cancellation request for ${runIdToCancel} accepted (202). Starting poll.`);
+        pollForCancelledStatus(runIdToCancel);
       } else {
         const errorText = await cancelResponse.text();
         const errorData = JSON.parse(errorText || "{}");
-        console.error(`handleUndeploy: Failed to cancel workflow run ${runIdToCancel} via backend. Status: ${cancelResponse.status}`, errorData);
-        throw new Error(`Failed to cancel workflow run ${runIdToCancel} via backend: ${cancelResponse.status} ${errorData.message || errorText}`);
+        console.error(`handleUndeploy: Failed to cancel workflow run ${runIdToCancel}. Status: ${cancelResponse.status}`, errorData);
+        throw new Error(`Failed to cancel workflow run ${runIdToCancel}: ${cancelResponse.status} ${errorData.message || errorText}`);
       }
     } catch (error: any) {
       console.error('handleUndeploy: Error caught:', error);
