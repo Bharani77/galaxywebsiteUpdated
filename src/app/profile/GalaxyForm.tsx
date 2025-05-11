@@ -225,11 +225,27 @@ const getApiAuthHeaders = (): Record<string, string> => {
           }
 
           if (details.tokenExpiresAt) {
-            const date = new Date(details.tokenExpiresAt);
-            const day = String(date.getDate()).padStart(2, '0');
-            const month = String(date.getMonth() + 1).padStart(2, '0'); // Month is 0-indexed
-            const year = date.getFullYear();
-            setTokenExpiryDisplay(`${day}-${month}-${year}`);
+            const expiryDate = new Date(details.tokenExpiresAt);
+            const today = new Date();
+            
+            // Normalize dates to midnight to compare day counts accurately
+            const expiryDateMidnight = new Date(expiryDate.getFullYear(), expiryDate.getMonth(), expiryDate.getDate());
+            const todayMidnight = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+
+            const day = String(expiryDate.getDate()).padStart(2, '0');
+            const month = String(expiryDate.getMonth() + 1).padStart(2, '0'); // Month is 0-indexed
+            const year = expiryDate.getFullYear();
+            const formattedDate = `${day}-${month}-${year}`;
+
+            let daysRemainingString = "";
+            if (expiryDateMidnight < todayMidnight) {
+              daysRemainingString = "(Expired)";
+            } else {
+              const diffTime = Math.abs(expiryDateMidnight.getTime() - todayMidnight.getTime());
+              const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+              daysRemainingString = `(${diffDays} day${diffDays !== 1 ? 's' : ''} remaining)`;
+            }
+            setTokenExpiryDisplay(`${formattedDate} ${daysRemainingString}`);
           }
         } else {
           // Not authenticated or error fetching session
