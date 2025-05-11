@@ -7,7 +7,7 @@ export interface UserSession {
   username: string; // This would be the username from the users table
   deployTimestamp?: string | null; // ISO string format for timestamp
   activeFormNumber?: number | null;
-  // tokenExpiresAt?: string | number | Date | null; // Temporarily remove
+  tokenExpiresAt?: string | number | Date | null; // Re-add for the session object type
 }
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
