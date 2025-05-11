@@ -12,13 +12,13 @@ const ORG = process.env.NEXT_PUBLIC_GITHUB_ORG || 'GalaxyKickLock';
 const REPO = process.env.NEXT_PUBLIC_GITHUB_REPO || 'GalaxyKickPipeline';
 const WORKFLOW_FILE_NAME = process.env.NEXT_PUBLIC_GITHUB_WORKFLOW_FILE || 'blank.yml';
 
-interface ClientSafeRunResponse { // Renamed and fields removed
+interface ClientSafeRunResponse { // Fields adjusted
   runId: number;
   status: string | null;
   conclusion: string | null;
-  // createdAt: string; // Removed
-  // htmlUrl: string; // Removed
-  // jobName: string; // Removed
+  jobName: string; // Essential for client logic
+  // createdAt: string; // To be removed
+  // htmlUrl: string; // To be removed
 }
 
 export async function GET(request: NextRequest) {
@@ -91,7 +91,8 @@ export async function GET(request: NextRequest) {
             runId: run.id,
             status: run.status,
             conclusion: run.conclusion,
-            // createdAt, htmlUrl, jobName are intentionally omitted
+            jobName: matchingJob.name, // Client needs this for logic
+            // createdAt and htmlUrl are omitted
           };
           return NextResponse.json(clientResponsePayload, { status: 200 });
         }

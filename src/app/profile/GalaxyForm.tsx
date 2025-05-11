@@ -55,13 +55,13 @@ const GalaxyForm: React.FC = () => {
   const [autoUndeployMessage, setAutoUndeployMessage] = useState<string | null>(null);
   const [showAutoUndeployPopup, setShowAutoUndeployPopup] = useState<boolean>(false);
 
-interface LatestUserRunResponse {
+interface LatestUserRunResponse { // Adjusted to match API response
   runId: number;
   status: string | null;
   conclusion: string | null;
-  createdAt: string;
-  htmlUrl: string;
-  jobName: string;
+  jobName: string; // Essential for logic
+  // createdAt: string; // No longer sent by API
+  // htmlUrl: string; // No longer sent by API
 }
 
 const getApiAuthHeaders = (): Record<string, string> => {
@@ -138,6 +138,7 @@ const getApiAuthHeaders = (): Record<string, string> => {
         const isActiveStatus = data.status === 'in_progress' || data.status === 'queued';
 
         if (isActiveStatus) {
+          // console.log for htmlUrl and createdAt can be removed or kept if useful for server-side debugging via client logs
           console.log(`Active deployment found (Run ID: ${data.runId}, Job: "${data.jobName}", Status: ${data.status}).`);
           setIsDeployed(true);
           setShowDeployPopup(false);
@@ -146,6 +147,7 @@ const getApiAuthHeaders = (): Record<string, string> => {
           console.log(`Latest run found (Run ID: ${data.runId}, Job: "${data.jobName}", Status: ${data.status}, Conclusion: ${data.conclusion}), but it's not currently active.`);
           setIsDeployed(false);
           setShowDeployPopup(true);
+          // Display message doesn't rely on createdAt or htmlUrl
           setDeploymentStatus(`Deployment not active. Latest run: ${data.status} (Conclusion: ${data.conclusion || 'N/A'}). Redeploy if needed.`);
         }
       } else if (response.status === 404) {
