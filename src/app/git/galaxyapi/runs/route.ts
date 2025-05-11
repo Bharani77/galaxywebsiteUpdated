@@ -25,9 +25,9 @@ interface ClientSafeRunDetails { // Renamed for clarity
   // html_url: string; // Explicitly removing GitHub URL
 }
 
-interface ClientSafeJobDetails { // Renamed for clarity
+interface SimpleJob {
   id: number;
-  // name: string; // Removing job name
+  name: string;
   status: string;
   conclusion: string | null;
 }
@@ -70,11 +70,14 @@ export async function GET(request: NextRequest) {
     // The delay is still relevant if GitHub needs time to populate jobs after a run starts
     await new Promise(resolve => setTimeout(resolve, 5000)); // 5 seconds delay
     endpoint = `/repos/${ORG}/${REPO}/actions/runs/${jobsForRunIdParam}/jobs`;
-    transformFunction = (ghJobsResponse: GitHubRunJobsResponse): { jobs: ClientSafeJobDetails[] } => ({
+    transformFunction = (ghJobsResponse: GitHubRunJobsResponse): { jobs: SimpleJob[] } => ({
+      // Review SimpleJob: currently includes 'name'. If this is sensitive, it should be removed.
+      // For now, assuming job name within a run might be okay for an authenticated user if they know the run ID.
+      // If job.name is also too sensitive (e.g. "Run for UserX"), then SimpleJob needs adjustment.
       jobs: ghJobsResponse && Array.isArray(ghJobsResponse.jobs) 
         ? ghJobsResponse.jobs.map((job: GitHubJob) => ({
-            id: job.id,
-            // name: job.name, // Removed job name
+            id: job.id, // Client might need job ID if it interacts with jobs
+            name: job.name, // Potentially sensitive if it reveals user-specific info
             status: job.status,
             conclusion: job.conclusion,
           }))
