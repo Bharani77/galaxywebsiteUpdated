@@ -42,6 +42,7 @@ export async function POST(request: NextRequest) {
       session.username, // Plain username for logical username generation
       session.deployTimestamp,
       session.activeFormNumber,
+      null, // activeRunId - beacon does not know this, so pass null
       supabaseService // Pass the service client
     );
 

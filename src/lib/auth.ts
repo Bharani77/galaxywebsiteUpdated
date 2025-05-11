@@ -104,7 +104,8 @@ export async function validateSession(request: NextRequest): Promise<UserSession
 export async function updateUserDeployStatus(
   userId: string,
   deployTimestamp: string | null,
-  activeFormNumber: number | null
+  activeFormNumber: number | null,
+  activeRunId?: number | string | null // Added activeRunId
 ): Promise<boolean> {
   if (!supabaseUrl || !supabaseServiceRoleKey) {
     console.error('Supabase client not initialized in updateUserDeployStatus due to missing env vars (URL or Service Key).');
@@ -115,19 +116,33 @@ export async function updateUserDeployStatus(
   const supabaseService = createClient(supabaseUrl, supabaseServiceRoleKey);
 
   try {
+    const updateData: {
+      deploy_timestamp: string | null;
+      active_form_number: number | null;
+      active_run_id?: number | string | null;
+    } = {
+      deploy_timestamp: deployTimestamp,
+      active_form_number: activeFormNumber,
+    };
+
+    if (activeRunId !== undefined) { // Check if activeRunId was passed
+      updateData.active_run_id = activeRunId;
+    } else if (deployTimestamp === null && activeFormNumber === null) {
+      // If clearing deployment, also clear run_id by default if not specified
+      updateData.active_run_id = null;
+    }
+    // If activeRunId is not passed and it's an update (not clearing), active_run_id remains unchanged in DB.
+
     const { error } = await supabaseService // Use service client
       .from('users')
-      .update({ 
-        deploy_timestamp: deployTimestamp,
-        active_form_number: activeFormNumber 
-      })
+      .update(updateData)
       .eq('id', userId);
 
     if (error) {
       console.error('Error updating user deploy status in Supabase (updateUserDeployStatus):', error.message);
       return false;
     }
-    console.log(`Deploy status updated for user ${userId} (updateUserDeployStatus): timestamp=${deployTimestamp}, form=${activeFormNumber}`);
+    console.log(`Deploy status updated for user ${userId} (updateUserDeployStatus): timestamp=${deployTimestamp}, form=${activeFormNumber}, runId=${activeRunId === undefined ? '(not changed)' : activeRunId}`);
     return true;
   } catch (error: any) {
     console.error('Exception during user deploy status update (updateUserDeployStatus):', error.message);

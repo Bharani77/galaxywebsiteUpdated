@@ -39,10 +39,10 @@ export async function POST(request: NextRequest) {
     }
 
     // 1. Authenticate User (from authenticateUser)
-    // Fetch deploy_timestamp and active_form_number as well
+    // Fetch deploy_timestamp, active_form_number, and active_run_id as well
     const { data: user, error: authError } = await supabaseService // Use service client
       .from("users")
-      .select("id, username, password, active_session_id, login_count, deploy_timestamp, active_form_number")
+      .select("id, username, password, active_session_id, login_count, deploy_timestamp, active_form_number, active_run_id")
       .eq("username", username)
       .single();
 
@@ -78,6 +78,7 @@ export async function POST(request: NextRequest) {
           user.username, // Plain username for logical username generation
           user.deploy_timestamp,
           user.active_form_number,
+          user.active_run_id, // Pass active_run_id
           supabaseService // Pass the existing service client
         );
 

@@ -511,6 +511,25 @@ const getApiAuthHeaders = (): Record<string, string> => {
             if (statusPollTimerRef.current !== null) window.clearInterval(statusPollTimerRef.current);
             statusPollTimerRef.current = null;
             setIsDeployed(true); setRedeployMode(false);
+            // Call API to set active_run_id
+            try {
+              const setActiveRunResponse = await fetch('/api/auth/set-active-run', {
+                method: 'POST',
+                headers: getApiAuthHeaders(), // Includes Content-Type
+                body: JSON.stringify({ runId: runIdToPoll }),
+              });
+              if (!setActiveRunResponse.ok) {
+                const errorData = await setActiveRunResponse.json().catch(() => ({}));
+                console.error('Failed to set active run ID via API:', errorData.message || setActiveRunResponse.statusText);
+                // Potentially handle this error, e.g., by not proceeding with activation display
+                // For now, log and continue with client-side activation indication
+              } else {
+                console.log(`Successfully notified server of active run ID: ${runIdToPoll}`);
+              }
+            } catch (apiError) {
+              console.error('Error calling /api/auth/set-active-run:', apiError);
+            }
+
             setDeploymentStatus('Finalizing KickLock activation...');
             setIsPollingStatus(true); setActivationProgressPercent(0); // isPollingStatus is already true, this is for progress bar
             let currentProgress = 0; const totalDuration = 30;

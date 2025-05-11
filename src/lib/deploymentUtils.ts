@@ -1,4 +1,4 @@
-import { SupabaseClient } from '@supabase/supabase-js';
+import { SupabaseClient, createClient } from '@supabase/supabase-js'; // Import createClient
 import { updateUserDeployStatus } from '@/lib/auth'; // Assuming updateUserDeployStatus is exported from auth
 
 /**
@@ -30,8 +30,22 @@ export async function performServerSideUndeploy(
   usernameForLogical: string,
   deployTimestamp: string | null | undefined,
   activeFormNumber: number | null | undefined,
-  supabaseService: SupabaseClient
+  activeRunId?: number | string | null, // Made activeRunId optional for calls not having it (like beacon)
+  supabaseService?: SupabaseClient // Make supabaseService optional if it can create its own
 ): Promise<{ success: boolean; message: string }> {
+
+  // Ensure Supabase client is available
+  let client = supabaseService;
+  if (!client) {
+    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+    const supabaseServiceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+    if (!supabaseUrl || !supabaseServiceRoleKey) {
+      console.error('[ServerUndeploy] Supabase client cannot be initialized (missing URL or Service Key).');
+      return { success: false, message: 'Server configuration error for undeploy.' };
+    }
+    client = createClient(supabaseUrl, supabaseServiceRoleKey);
+  }
+
   if (deployTimestamp && activeFormNumber) {
     const logicalUsername = getLogicalUsername({ username: usernameForLogical });
     
@@ -63,18 +77,66 @@ export async function performServerSideUndeploy(
 
       if (undeployResponse.ok) {
         console.log(`[ServerUndeploy] Successfully sent stop command to loca.lt for user ${userId}, form ${activeFormNumber}.`);
-        await updateUserDeployStatus(userId, null, null);
-        console.log(`[ServerUndeploy] Cleared deploy status in Supabase for user ${userId}.`);
-        return { success: true, message: 'Undeploy successful and database updated.' };
+        
+        // If activeRunId is provided, attempt to poll GitHub Actions for cancellation
+        if (activeRunId) {
+          console.log(`[ServerUndeploy] Polling GitHub for cancellation of run ID: ${activeRunId}`);
+          const pollTimeout = 60 * 1000; // 1 minute timeout for polling
+          const pollInterval = 5 * 1000; // 5 seconds interval
+          let pollStartTime = Date.now();
+          let runCancelled = false;
+
+          while (Date.now() - pollStartTime < pollTimeout) {
+            try {
+              // Construct the absolute URL for the API route
+              const currentUrl = new URL(process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'); // Fallback for local
+              const runsApiUrl = new URL(`/git/galaxyapi/runs?runId=${activeRunId}`, currentUrl);
+              
+              const ghResponse = await fetch(runsApiUrl.toString(), {
+                method: 'GET', // Assuming GET to fetch run status
+                headers: { 'Content-Type': 'application/json' }, // Add any necessary auth if this API is protected
+              });
+
+              if (ghResponse.ok) {
+                const runDetails = await ghResponse.json();
+                if (runDetails.status === 'completed' && runDetails.conclusion === 'cancelled') {
+                  console.log(`[ServerUndeploy] Run ID ${activeRunId} confirmed cancelled on GitHub.`);
+                  runCancelled = true;
+                  break;
+                } else if (runDetails.status === 'completed') {
+                  console.log(`[ServerUndeploy] Run ID ${activeRunId} completed with conclusion: ${runDetails.conclusion} (not cancelled).`);
+                  break; // Stop polling if completed but not cancelled
+                }
+                // Continue polling if still in progress or queued
+              } else {
+                console.warn(`[ServerUndeploy] Error fetching GitHub run status for ${activeRunId}: ${ghResponse.status}. Will retry.`);
+              }
+            } catch (ghError: any) {
+              console.error(`[ServerUndeploy] Exception during GitHub run status poll for ${activeRunId}: ${ghError.message}. Will retry.`);
+            }
+            await new Promise(resolve => setTimeout(resolve, pollInterval));
+          }
+
+          if (!runCancelled && (Date.now() - pollStartTime >= pollTimeout)) {
+            console.warn(`[ServerUndeploy] Timed out waiting for GitHub run ${activeRunId} to be cancelled.`);
+            // Proceed to clear DB status anyway
+          }
+        } else {
+          console.log(`[ServerUndeploy] No activeRunId provided, skipping GitHub poll. Proceeding to clear DB status.`);
+        }
+        
+        await updateUserDeployStatus(userId, null, null, null); // Clear timestamp, formNumber, and runId
+        console.log(`[ServerUndeploy] Cleared deploy status (timestamp, form, runId) in Supabase for user ${userId}.`);
+        return { success: true, message: 'Undeploy command sent and database status cleared. GitHub poll attempted if run ID was available.' };
+
       } else {
         console.error(`[ServerUndeploy] Failed to send stop command to loca.lt for user ${userId}. Status: ${undeployResponse.status}, Text: ${await undeployResponse.text()}`);
-        // Even if loca.lt fails, clear DB status to prevent inconsistent state or repeated attempts on stale data.
-        await updateUserDeployStatus(userId, null, null);
+        await updateUserDeployStatus(userId, null, null, null); // Clear DB status
         return { success: false, message: `Failed to contact deployment service (status: ${undeployResponse.status}). Deployment status in DB has been cleared.` };
       }
     } catch (e: any) {
       console.error(`[ServerUndeploy] Network error or exception during loca.lt fetch for undeploy (user ${userId}):`, e.message);
-      await updateUserDeployStatus(userId, null, null);
+      await updateUserDeployStatus(userId, null, null, null); // Clear DB status
       return { success: false, message: `Network error during undeploy attempt: ${e.message}. Deployment status in DB has been cleared.` };
     }
   } else {
