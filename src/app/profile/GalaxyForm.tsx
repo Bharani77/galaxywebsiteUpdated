@@ -54,6 +54,7 @@ const GalaxyForm: React.FC = () => {
   const [activationProgressPercent, setActivationProgressPercent] = useState<number>(0);
   const [autoUndeployMessage, setAutoUndeployMessage] = useState<string | null>(null);
   const [showAutoUndeployPopup, setShowAutoUndeployPopup] = useState<boolean>(false);
+  const [tokenExpiryDisplay, setTokenExpiryDisplay] = useState<string | null>(null);
 
   // Refs for managing timer IDs
   const findRunIdTimerRef = useRef<number | null>(null);
@@ -199,24 +200,75 @@ const getApiAuthHeaders = (): Record<string, string> => {
 
   useEffect(() => {
     if (!isClient) {
-      return; 
+      return;
     }
-    const storedUsername = sessionStorage.getItem('username'); 
-    if (storedUsername) {
-      setDisplayedUsername(storedUsername);
-      const suffix = '7890';
-      const suffixedUsername = `${storedUsername}${suffix}`; 
-      setUsername(suffixedUsername); 
+
+    const fetchSessionDetails = async () => {
+      try {
+        const response = await fetch('/api/auth/session-details');
+        if (response.ok) {
+          const details = await response.json();
+          if (details.username) {
+            setDisplayedUsername(details.username);
+            const suffix = '7890'; // Assuming this suffix logic is still desired
+            const suffixedUsername = `${details.username}${suffix}`;
+            setUsername(suffixedUsername);
+            
+            setShowDeployPopup(true);
+            setDeploymentStatus('Checking deployment status...');
+            checkInitialDeploymentStatus(suffixedUsername); // Pass suffixed username
+          } else {
+            // Handle case where username might not be in session details but session is valid
+             setDeploymentStatus('Please sign in to manage deployments.');
+             setIsDeployed(false);
+             setShowDeployPopup(true);
+          }
+
+          if (details.tokenExpiresAt) {
+            const date = new Date(details.tokenExpiresAt);
+            const day = String(date.getDate()).padStart(2, '0');
+            const month = String(date.getMonth() + 1).padStart(2, '0'); // Month is 0-indexed
+            const year = date.getFullYear();
+            setTokenExpiryDisplay(`${day}-${month}-${year}`);
+          }
+        } else {
+          // Not authenticated or error fetching session
+          console.error('Failed to fetch session details:', response.status);
+          setDeploymentStatus('Session details unavailable. Please sign in.');
+          setIsDeployed(false);
+          setShowDeployPopup(true);
+          // Optionally redirect to signin if session is strictly required
+          // router.push('/signin'); 
+        }
+      } catch (error) {
+        console.error('Error fetching session details:', error);
+        setDeploymentStatus('Error fetching session. Please try signing in again.');
+        setIsDeployed(false);
+        setShowDeployPopup(true);
+      }
+    };
+
+    fetchSessionDetails();
+
+    // Original logic for sessionStorage username (can be fallback or removed if API is primary)
+    // const storedUsername = sessionStorage.getItem('username'); 
+    // if (storedUsername) {
+    //   setDisplayedUsername(storedUsername);
+    //   const suffix = '7890';
+    //   const suffixedUsername = `${storedUsername}${suffix}`; 
+    //   setUsername(suffixedUsername); 
       
-      setShowDeployPopup(true);
-      setDeploymentStatus('Checking deployment status...'); 
-      checkInitialDeploymentStatus(suffixedUsername); 
-    } else {
-      setDeploymentStatus('Please sign in to manage deployments.');
-      setIsDeployed(false);
-      setShowDeployPopup(true);
+    //   setShowDeployPopup(true);
+    //   setDeploymentStatus('Checking deployment status...'); 
+    //   checkInitialDeploymentStatus(suffixedUsername); 
+    // } else {
+    //   setDeploymentStatus('Please sign in to manage deployments.');
+    //   setIsDeployed(false);
+    //   setShowDeployPopup(true);
       // router.push('/signin'); // Consider if redirect is needed if no username
-    }
+    // }
+
+    // REMOVED DUPLICATE handleBeforeUnload HERE - the correct one is in the other useEffect
 
     const handleBeforeUnload = (event: BeforeUnloadEvent) => {
       // Check isDeployed state at the moment of unload
@@ -827,7 +879,18 @@ const getApiAuthHeaders = (): Record<string, string> => {
         </div>
       )}
       <div className={styles.header} style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', padding: '0px', backgroundColor: '#1a1a1a', borderRadius: '0px', margin: '0 0 20px 0', position: 'relative' }}>
-        {displayedUsername && ( <div style={{ color: '#fff', fontWeight: 'bold', fontSize: '1.1rem', position: 'absolute', left: '-770px', top: '-25px', display: 'flex', alignItems: 'center' }}> <span style={{ marginRight: '4px' }}>Welcome:</span> <span>{displayedUsername}</span> </div> )}
+        {displayedUsername && (
+          <div style={{ color: '#fff', fontSize: '1.1rem', position: 'absolute', left: '-770px', top: '-25px' }}>
+            <div style={{ fontWeight: 'bold', display: 'flex', alignItems: 'center' }}>
+              <span style={{ marginRight: '4px' }}>Welcome:</span> <span>{displayedUsername}</span>
+            </div>
+            {tokenExpiryDisplay && (
+              <div style={{ fontSize: '0.85rem', color: '#ccc', marginTop: '4px' }}>
+                Token Expires: {tokenExpiryDisplay}
+              </div>
+            )}
+          </div>
+        )}
         <div style={{ marginLeft: 'auto' }}> <button onClick={handleLogout} className={`${styles.button} ${styles.logoutButton}`} > <LogOut size={16} /> <span>Logout</span> </button> </div>
       </div>
       <h1 className={styles.title}> <span className={styles.kickLock}>KICK ~ LOCK</span> </h1>
