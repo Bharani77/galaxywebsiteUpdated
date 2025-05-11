@@ -27,7 +27,7 @@ export async function GET(request: NextRequest) {
 
   if (!process.env.GITHUB_TOKEN) {
     console.error('Critical: GitHub token not configured on the server for latest-user-run.');
-    return NextResponse.json({ message: 'Server configuration error: Required integration token missing.' }, { status: 500 });
+    return NextResponse.json({ message: 'Server configuration error: GitHub token missing.' }, { status: 500 });
   }
 
   const searchParams = request.nextUrl.searchParams;
@@ -55,9 +55,7 @@ export async function GET(request: NextRequest) {
 
     const runsResponse = await runsResult.json() as GitHubWorkflowRunsResponse;
     if (!runsResponse.workflow_runs || runsResponse.workflow_runs.length === 0) {
-      // WORKFLOW_FILE_NAME might be too specific.
-      console.log(`No workflow runs found for ${WORKFLOW_FILE_NAME} (ORG: ${ORG}, REPO: ${REPO}).`);
-      return NextResponse.json({ message: `No recent background processes found.` }, { status: 404 });
+      return NextResponse.json({ message: `No workflow runs found for ${WORKFLOW_FILE_NAME}.` }, { status: 404 });
     }
 
     // The runs are already sorted newest first by the GitHub API.
@@ -98,7 +96,7 @@ export async function GET(request: NextRequest) {
 
     // If loop completes, no matching run was found
     console.log(`No runs found with a job named "${targetJobName}" after checking all runs.`);
-    return NextResponse.json({ message: `No matching task found for your request.` }, { status: 404 });
+    return NextResponse.json({ message: `No runs found with a job named "${targetJobName}".` }, { status: 404 });
 
   } catch (error: any) {
     console.error('Error in latest-user-run endpoint:', error);

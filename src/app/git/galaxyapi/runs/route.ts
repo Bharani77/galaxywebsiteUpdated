@@ -42,7 +42,7 @@ export async function GET(request: NextRequest) {
   // but good to have a high-level check or ensure it's caught by the util.
   if (!process.env.GITHUB_TOKEN) {
     console.error('Critical: GitHub token not configured on the server.');
-    return NextResponse.json({ message: 'Server configuration error: Required integration token missing.' }, { status: 500 });
+    return NextResponse.json({ message: 'Server configuration error: GitHub token missing.' }, { status: 500 });
   }
 
   const searchParams = request.nextUrl.searchParams;
@@ -128,7 +128,7 @@ export async function GET(request: NextRequest) {
       } catch (e) {
         console.error(`Attempt ${attempts}: Failed to parse JSON response from GitHub. Status: ${apiResponse.status}`, e);
         // Treat JSON parse error as a fetch failure for retry purposes
-        apiResponse = NextResponse.json({ message: 'Failed to parse response from the automation service.' }, { status: 502 }); // Override apiResponse to indicate error
+        apiResponse = NextResponse.json({ message: 'Failed to parse GitHub response.' }, { status: 502 }); // Override apiResponse to indicate error
       }
     }
 
@@ -153,7 +153,7 @@ export async function GET(request: NextRequest) {
   if (!apiResponse || !apiResponse.ok) {
     // This case should ideally be caught by the loop's exit conditions (maxAttempts or non-retryable status)
     console.error("All attempts failed to fetch data from GitHub or last attempt was not ok.");
-    return apiResponse || NextResponse.json({ message: 'Failed to fetch data from the automation service after multiple attempts.' }, { status: 500 });
+    return apiResponse || NextResponse.json({ message: 'Failed to fetch data from GitHub after multiple attempts.' }, { status: 500 });
   }
   
   // rawData should be populated if apiResponse.ok was true and JSON parsing succeeded
@@ -169,7 +169,7 @@ export async function POST(request: NextRequest) {
   }
   if (!process.env.GITHUB_TOKEN) {
     console.error('Critical: GitHub token not configured on the server.');
-    return NextResponse.json({ message: 'Server configuration error: Required integration token missing.' }, { status: 500 });
+    return NextResponse.json({ message: 'Server configuration error: GitHub token missing.' }, { status: 500 });
   }
 
   const searchParams = request.nextUrl.searchParams;
