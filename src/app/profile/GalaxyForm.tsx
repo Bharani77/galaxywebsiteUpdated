@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react'; // Added useRef
 import { Play, Square, RefreshCw, LogOut, CheckCircle, X } from 'lucide-react';
 import styles from '../styles/GalaxyControl.module.css';
 import { useRouter } from 'next/navigation';
@@ -55,6 +55,11 @@ const GalaxyForm: React.FC = () => {
   const [autoUndeployMessage, setAutoUndeployMessage] = useState<string | null>(null);
   const [showAutoUndeployPopup, setShowAutoUndeployPopup] = useState<boolean>(false);
 
+  // Refs for managing timer IDs
+  const findRunIdTimerRef = useRef<number | null>(null);
+  const statusPollTimerRef = useRef<number | null>(null);
+  const cancelPollTimerRef = useRef<number | null>(null);
+
 interface LatestUserRunResponse { // Adjusted to match API response
   runId: number;
   status: string | null;
@@ -75,6 +80,24 @@ const getApiAuthHeaders = (): Record<string, string> => {
   // console.log('getApiAuthHeaders: Relying on HttpOnly cookies for session auth.');
   return headers;
 };
+
+  const clearAllPollingTimers = useCallback(() => {
+    if (findRunIdTimerRef.current !== null) {
+      window.clearInterval(findRunIdTimerRef.current);
+      findRunIdTimerRef.current = null;
+    }
+    if (statusPollTimerRef.current !== null) {
+      window.clearInterval(statusPollTimerRef.current);
+      statusPollTimerRef.current = null;
+    }
+    if (cancelPollTimerRef.current !== null) {
+      window.clearInterval(cancelPollTimerRef.current);
+      cancelPollTimerRef.current = null;
+    }
+    // activationProgressTimerId is state, cleared where it's set/used or here if needed
+    // For now, focusing on the polling timers causing potential freezes.
+    // console.log('Polling timers cleared via refs.');
+  }, []); // No direct state dependencies for these refs, but activationProgressTimerId is state
   
   const formNames = {
     1: 'Kick 1',
@@ -239,36 +262,37 @@ const getApiAuthHeaders = (): Record<string, string> => {
   const startDeploymentCheck = async (suffixedUsernameForJobSearch: string | null) => {
     if (!suffixedUsernameForJobSearch) {
       setDeploymentStatus('Logical username (suffixed) not available for status check.');
-      setIsPollingStatus(false); 
+      setIsPollingStatus(false);
       return;
     }
-    if (activationProgressTimerId !== null) { 
+    // Clear any existing activation progress timer specifically, others handled by clearAllPollingTimers if called before this
+    if (activationProgressTimerId !== null) {
       window.clearInterval(activationProgressTimerId);
       setActivationProgressTimerId(null);
     }
-
-    if (!isPollingStatus) setIsPollingStatus(true); 
+    
+    setIsPollingStatus(true); // Explicitly set polling status true for this operation
     setRedeployMode(false);
 
-    const jobNameToFind = `Run for ${suffixedUsernameForJobSearch}`; 
+    const jobNameToFind = `Run for ${suffixedUsernameForJobSearch}`;
     console.log(`Initiating workflow run search. Target job name: "${jobNameToFind}"`);
 
     const authHeaders = getApiAuthHeaders(); // Primarily for Content-Type
-    // The check for authHeaders['Authorization'] is removed.
 
-    let findRunIdTimer: number | null = null;
+    // findRunIdTimer is now findRunIdTimerRef.current
     const findRunIdTimeoutDuration = 30 * 1000;
     const findRunIdInterval = 5 * 1000;
     const findRunIdStartTime = Date.now();
 
     const attemptToFindRunId = async () => {
       console.log(`Attempting to find workflow run ID for job "${jobNameToFind}" using new endpoint (activeOnly=true).`);
-      
+
       const attemptNumber = Math.floor((Date.now() - findRunIdStartTime) / findRunIdInterval) + 1;
       setDeploymentStatus(`Locating workflow run (attempt ${attemptNumber})...`);
 
       if (Date.now() - findRunIdStartTime > findRunIdTimeoutDuration) {
-        if (findRunIdTimer !== null) window.clearInterval(findRunIdTimer);
+        if (findRunIdTimerRef.current !== null) window.clearInterval(findRunIdTimerRef.current);
+        findRunIdTimerRef.current = null;
         console.error(`Timeout: Could not find a workflow run with job "${jobNameToFind}" within ${findRunIdTimeoutDuration / 1000}s.`);
         setDeploymentStatus('Could not locate the triggered workflow run in time. Please check GitHub Actions or try again.');
         setIsPollingStatus(false);
@@ -282,23 +306,24 @@ const getApiAuthHeaders = (): Record<string, string> => {
         if (response.ok) {
           const data = await response.json() as LatestUserRunResponse;
           if (data.runId && data.jobName === jobNameToFind) {
-            if (findRunIdTimer !== null) window.clearInterval(findRunIdTimer);
+            if (findRunIdTimerRef.current !== null) window.clearInterval(findRunIdTimerRef.current);
+            findRunIdTimerRef.current = null;
             console.log(`Successfully found run ID: ${data.runId} for job "${data.jobName}". Proceeding to status polling.`);
-            pollRunStatus(data.runId); 
+            pollRunStatus(data.runId);
           } else {
             console.warn(`Active run found (ID: ${data.runId}, Job: "${data.jobName}"), but job name did not match target "${jobNameToFind}". Retrying...`);
             if (Date.now() - findRunIdStartTime <= findRunIdTimeoutDuration - findRunIdInterval) {
-              findRunIdTimer = window.setTimeout(attemptToFindRunId, findRunIdInterval);
-            } else { 
-               findRunIdTimer = window.setTimeout(attemptToFindRunId, 1000);
+              findRunIdTimerRef.current = window.setTimeout(attemptToFindRunId, findRunIdInterval);
+            } else {
+              findRunIdTimerRef.current = window.setTimeout(attemptToFindRunId, 1000);
             }
           }
         } else if (response.status === 404) {
           console.log(`Active run for job "${jobNameToFind}" not yet found (404). Retrying...`);
           if (Date.now() - findRunIdStartTime <= findRunIdTimeoutDuration - findRunIdInterval) {
-            findRunIdTimer = window.setTimeout(attemptToFindRunId, findRunIdInterval);
-          } else { 
-             findRunIdTimer = window.setTimeout(attemptToFindRunId, 1000);
+            findRunIdTimerRef.current = window.setTimeout(attemptToFindRunId, findRunIdInterval);
+          } else {
+            findRunIdTimerRef.current = window.setTimeout(attemptToFindRunId, 1000);
           }
         } else {
           const errorData = await response.json();
@@ -307,11 +332,12 @@ const getApiAuthHeaders = (): Record<string, string> => {
       } catch (error) {
         console.error('Error during attemptToFindRunId:', error);
         if (Date.now() - findRunIdStartTime <= findRunIdTimeoutDuration - findRunIdInterval) {
-            findRunIdTimer = window.setTimeout(attemptToFindRunId, findRunIdInterval);
+            findRunIdTimerRef.current = window.setTimeout(attemptToFindRunId, findRunIdInterval);
         } else if (Date.now() - findRunIdStartTime <= findRunIdTimeoutDuration) {
-            findRunIdTimer = window.setTimeout(attemptToFindRunId, 1000);
+            findRunIdTimerRef.current = window.setTimeout(attemptToFindRunId, 1000);
         } else {
-            if (findRunIdTimer !== null) window.clearInterval(findRunIdTimer);
+            if (findRunIdTimerRef.current !== null) window.clearInterval(findRunIdTimerRef.current);
+            findRunIdTimerRef.current = null;
             setDeploymentStatus(`Error while trying to find workflow run: ${error instanceof Error ? error.message : String(error)}`);
             setIsPollingStatus(false);
             setRedeployMode(true);
@@ -321,14 +347,15 @@ const getApiAuthHeaders = (): Record<string, string> => {
 
     const pollRunStatus = (runIdToPoll: number) => {
       setDeploymentStatus(`Monitoring run ID: ${runIdToPoll}. Waiting for status updates...`);
-      const pollingTimeout = 3 * 60 * 1000; 
-      const pollIntervalTime = 10 * 1000; 
+      const pollingTimeout = 3 * 60 * 1000;
+      const pollIntervalTime = 10 * 1000;
       const statusPollStartTime = Date.now();
-      let statusPollTimer: number | null = null;
+      // statusPollTimer is now statusPollTimerRef.current
 
       const performStatusPoll = async () => {
         if (Date.now() - statusPollStartTime > pollingTimeout) {
-          if (statusPollTimer !== null) window.clearInterval(statusPollTimer);
+          if (statusPollTimerRef.current !== null) window.clearInterval(statusPollTimerRef.current);
+          statusPollTimerRef.current = null;
           setDeploymentStatus('Deployment timed out while waiting for "in_progress" status. Please try again.');
           setIsDeployed(false);
           setIsPollingStatus(false);
@@ -338,7 +365,8 @@ const getApiAuthHeaders = (): Record<string, string> => {
         try {
           const runStatusResponse = await fetch(`/git/galaxyapi/runs?runId=${runIdToPoll}`, { headers: authHeaders });
           if (!runStatusResponse.ok) {
-            if (statusPollTimer !== null) window.clearInterval(statusPollTimer);
+            if (statusPollTimerRef.current !== null) window.clearInterval(statusPollTimerRef.current);
+            statusPollTimerRef.current = null;
             const errorText = await runStatusResponse.text();
             setDeploymentStatus(`Failed to fetch deployment status from backend. ${errorText}`);
             setIsPollingStatus(false); setIsDeployed(false); setRedeployMode(true);
@@ -346,10 +374,11 @@ const getApiAuthHeaders = (): Record<string, string> => {
           }
           const runDetails = await runStatusResponse.json();
           if (runDetails.status === 'in_progress') {
-            if (statusPollTimer !== null) window.clearInterval(statusPollTimer);
+            if (statusPollTimerRef.current !== null) window.clearInterval(statusPollTimerRef.current);
+            statusPollTimerRef.current = null;
             setIsDeployed(true); setRedeployMode(false);
             setDeploymentStatus('Finalizing KickLock activation...');
-            setIsPollingStatus(true); setActivationProgressPercent(0);
+            setIsPollingStatus(true); setActivationProgressPercent(0); // isPollingStatus is already true, this is for progress bar
             let currentProgress = 0; const totalDuration = 30;
             const newActivationTimerId = window.setInterval(() => {
               currentProgress += 1;
@@ -365,25 +394,26 @@ const getApiAuthHeaders = (): Record<string, string> => {
             setActivationProgressTimerId(newActivationTimerId);
           } else {
             setDeploymentStatus(`Workflow status: ${runDetails.status} (Conclusion: ${runDetails.conclusion || 'N/A'}). Waiting...`);
-            statusPollTimer = window.setTimeout(performStatusPoll, pollIntervalTime);
+            statusPollTimerRef.current = window.setTimeout(performStatusPoll, pollIntervalTime);
           }
         } catch (pollError) {
-          if (statusPollTimer !== null) window.clearInterval(statusPollTimer);
+          if (statusPollTimerRef.current !== null) window.clearInterval(statusPollTimerRef.current);
+          statusPollTimerRef.current = null;
           setDeploymentStatus('Error polling deployment status. Please try again.');
           setIsDeployed(false); setIsPollingStatus(false); setRedeployMode(true);
         }
       };
-      statusPollTimer = window.setTimeout(performStatusPoll, 0); 
+      statusPollTimerRef.current = window.setTimeout(performStatusPoll, 0);
     };
     attemptToFindRunId();
   };
 
-  const pollForCancelledStatus = async (runId: number) => { 
-    const pollTimeout = 60 * 1000; 
-    const pollInterval = 5 * 1000; 
+  const pollForCancelledStatus = async (runId: number) => {
+    const pollTimeout = 60 * 1000;
+    const pollInterval = 5 * 1000;
     const startTime = Date.now();
-    let timer: number | null = null;
-  
+    // timer is now cancelPollTimerRef.current
+
     console.log(`Polling for cancellation of run ID: ${runId}`);
     const authHeaders = getApiAuthHeaders(); // Primarily for Content-Type
     // The check for authHeaders['Authorization'] is removed.
@@ -391,10 +421,12 @@ const getApiAuthHeaders = (): Record<string, string> => {
     const check = async () => {
       console.log(`pollForCancelledStatus: Checking run ${runId}...`);
         if (Date.now() - startTime > pollTimeout) {
-          if (timer !== null) window.clearInterval(timer);
+          if (cancelPollTimerRef.current !== null) window.clearInterval(cancelPollTimerRef.current);
+          cancelPollTimerRef.current = null;
           setDeploymentStatus('Timed out waiting for cancellation confirmation. You may need to redeploy.');
           console.log(`pollForCancelledStatus: Timed out for run ${runId}.`);
           setIsUndeploying(false);
+          setIsPollingStatus(false); // Ensure polling status is reset
           setIsDeployed(false);
           setRedeployMode(true);
           setShowDeployPopup(true);
@@ -404,11 +436,13 @@ const getApiAuthHeaders = (): Record<string, string> => {
       try {
         const response = await fetch(`/git/galaxyapi/runs?runId=${runId}`, { headers: authHeaders });
           if (!response.ok) {
-            if (timer !== null) window.clearInterval(timer);
+            if (cancelPollTimerRef.current !== null) window.clearInterval(cancelPollTimerRef.current);
+            cancelPollTimerRef.current = null;
             const errorText = await response.text();
             setDeploymentStatus(`Error fetching run status during undeploy from backend. ${errorText}`);
             console.error(`pollForCancelledStatus: Error fetching status for run ${runId} from backend. Status: ${response.status}`);
             setIsUndeploying(false);
+            setIsPollingStatus(false); // Ensure polling status is reset
             setIsDeployed(false);
             setRedeployMode(true);
             setShowDeployPopup(true);
@@ -416,54 +450,68 @@ const getApiAuthHeaders = (): Record<string, string> => {
           }
         const runDetails = await response.json();
         console.log(`pollForCancelledStatus: Run ${runId} status: ${runDetails.status}, conclusion: ${runDetails.conclusion}`);
-  
+
         if (runDetails.status === 'completed' && runDetails.conclusion === 'cancelled') {
-          if (timer !== null) window.clearInterval(timer);
+          if (cancelPollTimerRef.current !== null) window.clearInterval(cancelPollTimerRef.current);
+          cancelPollTimerRef.current = null;
           setDeploymentStatus('Deployment successfully cancelled.');
           setIsDeployed(false);
           setIsUndeploying(false);
-          setShowDeployPopup(true); 
+          setIsPollingStatus(false); // Ensure polling status is reset
+          setShowDeployPopup(true);
           setRedeployMode(false); 
           console.log(`pollForCancelledStatus: Run ${runId} successfully cancelled.`);
         } else if (runDetails.status === 'completed') {
-          if (timer !== null) window.clearInterval(timer);
+          if (cancelPollTimerRef.current !== null) window.clearInterval(cancelPollTimerRef.current);
+          cancelPollTimerRef.current = null;
           setDeploymentStatus(`Undeploy failed: Workflow completed (${runDetails.conclusion}), not cancelled. You may need to redeploy.`);
           console.log(`pollForCancelledStatus: Run ${runId} completed with ${runDetails.conclusion}, but was expected to be cancelled.`);
           setIsUndeploying(false);
-          setIsDeployed(false); 
+          setIsPollingStatus(false); // Ensure polling status is reset
+          setIsDeployed(false);
           setRedeployMode(true);
           setShowDeployPopup(true);
         } else {
           setDeploymentStatus(`Waiting for cancellation... Current status: ${runDetails.status}`);
-          timer = window.setTimeout(check, pollInterval);
+          cancelPollTimerRef.current = window.setTimeout(check, pollInterval);
         }
       } catch (error) {
-        if (timer !== null) window.clearInterval(timer);
+        if (cancelPollTimerRef.current !== null) window.clearInterval(cancelPollTimerRef.current);
+        cancelPollTimerRef.current = null;
         setDeploymentStatus('Error checking cancellation status. You may need to redeploy.');
         console.error(`pollForCancelledStatus: Error polling run ${runId}:`, error);
         setIsUndeploying(false);
+        setIsPollingStatus(false); // Ensure polling status is reset
         setIsDeployed(false);
         setRedeployMode(true);
         setShowDeployPopup(true);
       }
     };
-    timer = window.setTimeout(check, 0); 
+    cancelPollTimerRef.current = window.setTimeout(check, 0);
   };
 
   const handleUndeploy = async () => {
-    if (!username) { 
+    clearAllPollingTimers(); // Clear any ongoing deploy polling
+    if (!username) {
       alert('Username not found.'); return;
     }
+    // activationProgressTimerId is cleared by clearAllPollingTimers if it was part of it,
+    // or cleared individually if not. It's already state, so direct set is fine.
     if (activationProgressTimerId !== null) {
-      window.clearInterval(activationProgressTimerId); setActivationProgressTimerId(null);
+      window.clearInterval(activationProgressTimerId);
+      setActivationProgressTimerId(null);
     }
+    setActivationProgressPercent(0); // Reset progress
+
     setButtonStates1(initialButtonStates); setButtonStates2(initialButtonStates); setButtonStates3(initialButtonStates);
     setButtonStates4(initialButtonStates); setButtonStates5(initialButtonStates);
     setError1([]); setError2([]); setError3([]); setError4([]); setError5([]);
-    setIsUndeploying(true); setShowDeployPopup(true);
+    setIsUndeploying(true);
+    setIsPollingStatus(true); // Indicates an operation is in progress (undeploy polling)
+    setShowDeployPopup(true);
     setDeploymentStatus('Attempting to cancel current deployment...');
 
-    const authHeaders = getApiAuthHeaders(); // Primarily for Content-Type
+    const authHeaders = getApiAuthHeaders();
     // The check for authHeaders['Authorization'] is removed.
     
     const suffixedUsernameForJobSearch = username; 
@@ -513,19 +561,23 @@ const getApiAuthHeaders = (): Record<string, string> => {
   };
 
   const handleDeploy = async () => {
-    if (!username) { 
+    clearAllPollingTimers(); // Clear any ongoing undeploy polling
+    if (!username) {
       alert('Username not found. Please log in again.'); return;
     }
-    if (activationProgressTimerId !== null) {
+    if (activationProgressTimerId !== null) { // Also cleared by clearAllPollingTimers if it was part of it
       window.clearInterval(activationProgressTimerId);
       setActivationProgressTimerId(null);
     }
-    setIsDeploying(true); 
-    setRedeployMode(false); 
-    setShowDeployPopup(true); 
-    setDeploymentStatus('Dispatching workflow...'); 
-    
-    const authHeaders = getApiAuthHeaders(); // Primarily for Content-Type
+    setActivationProgressPercent(0); // Reset progress
+
+    setIsDeploying(true); // Indicates the dispatch API call is happening
+    setRedeployMode(false);
+    setShowDeployPopup(true);
+    setDeploymentStatus('Dispatching workflow...');
+    // setIsPollingStatus(false); // Will be set to true by startDeploymentCheck if dispatch is successful
+
+    const authHeaders = getApiAuthHeaders();
     // The check for authHeaders['Authorization'] is removed.
     
     try {
