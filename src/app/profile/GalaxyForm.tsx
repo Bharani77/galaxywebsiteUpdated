@@ -216,32 +216,34 @@ const getApiAuthHeaders = (): Record<string, string> => {
     }
 
     const handleStaleSession = async () => {
-      setToastMessage('New session is active. This session has been logged out.');
+      setToastMessage('New session is active. This session has been logged out by a new login elsewhere.');
       
-      // Attempt to clear server-side session cookies first
+      // Attempt to call the server-side signout. This will primarily try to clear HttpOnly cookies.
+      // It's expected this might fail with 401 if the session is already invalidated by the new login,
+      // but the /api/auth/signout route should still attempt to send cookie-clearing headers.
       try {
-        console.log('Stale session: Calling /api/auth/signout to clear cookies.');
+        console.log('[StaleSession] Attempting to call /api/auth/signout to ensure cookies are cleared.');
         const signoutResponse = await fetch('/api/auth/signout', { 
           method: 'POST',
-          headers: getApiAuthHeaders(), // Cookies are auto-sent by browser
+          headers: getApiAuthHeaders(), 
         });
         if (!signoutResponse.ok) {
-          console.error('Call to /api/auth/signout failed during stale session handling:', signoutResponse.statusText);
+          // This is somewhat expected if the session was already invalidated server-side by the new login.
+          const errorData = await signoutResponse.json().catch(() => ({}));
+          console.warn(`[StaleSession] Call to /api/auth/signout responded with ${signoutResponse.status}: ${errorData.message || signoutResponse.statusText}. This tab's session was likely already invalidated.`);
         } else {
-          console.log('/api/auth/signout call successful during stale session handling.');
+          console.log('[StaleSession] /api/auth/signout call reported success.');
         }
       } catch (error) {
-        console.error('Error calling /api/auth/signout during stale session handling:', error);
+        console.error('[StaleSession] Error calling /api/auth/signout:', error);
       }
 
-      if (isDeployed) { // Check current deployment state
-        console.log('Stale session: Attempting undeploy...');
-        // Note: handleUndeploy makes API calls which might fail with 401 now that cookies are cleared.
-        // The beacon on beforeunload is the more reliable undeploy for this scenario.
-        // Consider if handleUndeploy should even be called here, or if we rely on beacon.
-        // For now, keeping it, but it might not fully succeed.
-        await handleUndeploy(); 
-      }
+      // DO NOT call handleUndeploy() here. 
+      // The server-side sign-in process for the NEW session is responsible for
+      // undeploying any resources associated with THIS OLD session.
+      // Calling handleUndeploy() from this now-unauthenticated client would fail
+      // and could cause conflicts or redundant operations.
+      console.log('[StaleSession] Undeploy for this old session is handled by the new session\'s sign-in process. Skipping client-side undeploy attempt.');
 
       // Clear local state and redirect
       sessionStorage.removeItem('username');
