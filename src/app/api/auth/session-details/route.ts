@@ -51,6 +51,7 @@ export async function GET(request: NextRequest) {
   }
 
   return NextResponse.json({
+    userId: session.userId, // Add userId to the response
     username: session.username,
     tokenExpiresAt: tokenExpiresAtToSend,
   });

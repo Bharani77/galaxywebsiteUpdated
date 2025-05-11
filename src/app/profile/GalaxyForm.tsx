@@ -2,6 +2,7 @@ import React, { useState, useEffect, useCallback, useRef } from 'react'; // Adde
 import { Play, Square, RefreshCw, LogOut, CheckCircle, X } from 'lucide-react';
 import styles from '../styles/GalaxyControl.module.css';
 import { useRouter } from 'next/navigation';
+import { createClient, SupabaseClient } from '@supabase/supabase-js'; // Import Supabase
 
 type FormData = {
   RC: string;
@@ -55,6 +56,7 @@ const GalaxyForm: React.FC = () => {
   const [autoUndeployMessage, setAutoUndeployMessage] = useState<string | null>(null);
   const [showAutoUndeployPopup, setShowAutoUndeployPopup] = useState<boolean>(false);
   const [tokenExpiryDisplay, setTokenExpiryDisplay] = useState<string | null>(null);
+  const [currentUserId, setCurrentUserId] = useState<string | null>(null); // To store user ID for broadcast check
 
   // Refs for managing timer IDs
   const findRunIdTimerRef = useRef<number | null>(null);
@@ -203,6 +205,36 @@ const getApiAuthHeaders = (): Record<string, string> => {
       return;
     }
 
+    let supabaseClient: SupabaseClient | null = null;
+    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+    const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+
+    if (supabaseUrl && supabaseAnonKey) {
+      supabaseClient = createClient(supabaseUrl, supabaseAnonKey);
+    } else {
+      console.error('Supabase URL or Anon Key not configured for client-side listeners.');
+    }
+
+    const handleStaleSession = async () => {
+      setToastMessage('New session is active. This session has been logged out.');
+      if (isDeployed) { // Check current deployment state
+        console.log('Stale session: Attempting undeploy...');
+        // Note: handleUndeploy makes API calls which might fail with 401.
+        // It should ideally handle this gracefully or we need a "force undeploy" via beacon.
+        // For now, let it attempt.
+        await handleUndeploy(); 
+      }
+      // Clear local state and redirect
+      sessionStorage.removeItem('username');
+      // Potentially clear other session-related items
+      // sessionStorage.clear(); 
+      setUsername(null);
+      setDisplayedUsername(null);
+      setIsDeployed(false);
+      // router.push('/signin'); // Redirect after a small delay for toast
+      setTimeout(() => router.push('/signin'), 3000);
+    };
+
     const fetchSessionDetails = async () => {
       try {
         const response = await fetch('/api/auth/session-details');
@@ -210,15 +242,24 @@ const getApiAuthHeaders = (): Record<string, string> => {
           const details = await response.json();
           if (details.username) {
             setDisplayedUsername(details.username);
-            const suffix = '7890'; // Assuming this suffix logic is still desired
+            // Assuming session.userId is returned by /api/auth/session-details
+            // If not, we need to adjust the API or how userId is obtained client-side
+            // For now, let's assume `details.userId` is available from the API
+            // If not, we'll need to modify /api/auth/session-details to return it.
+            // For the broadcast listener, we need the current user's ID.
+            // Let's assume /api/auth/session-details also returns userId
+            if (details.userId) { // Placeholder: ensure API returns userId
+                setCurrentUserId(details.userId.toString());
+            }
+
+            const suffix = '7890'; 
             const suffixedUsername = `${details.username}${suffix}`;
             setUsername(suffixedUsername);
             
             setShowDeployPopup(true);
             setDeploymentStatus('Checking deployment status...');
-            checkInitialDeploymentStatus(suffixedUsername); // Pass suffixed username
+            checkInitialDeploymentStatus(suffixedUsername); 
           } else {
-            // Handle case where username might not be in session details but session is valid
              setDeploymentStatus('Please sign in to manage deployments.');
              setIsDeployed(false);
              setShowDeployPopup(true);
@@ -266,25 +307,29 @@ const getApiAuthHeaders = (): Record<string, string> => {
 
     fetchSessionDetails();
 
-    // Original logic for sessionStorage username (can be fallback or removed if API is primary)
-    // const storedUsername = sessionStorage.getItem('username'); 
-    // if (storedUsername) {
-    //   setDisplayedUsername(storedUsername);
-    //   const suffix = '7890';
-    //   const suffixedUsername = `${storedUsername}${suffix}`; 
-    //   setUsername(suffixedUsername); 
-      
-    //   setShowDeployPopup(true);
-    //   setDeploymentStatus('Checking deployment status...'); 
-    //   checkInitialDeploymentStatus(suffixedUsername); 
-    // } else {
-    //   setDeploymentStatus('Please sign in to manage deployments.');
-    //   setIsDeployed(false);
-    //   setShowDeployPopup(true);
-      // router.push('/signin'); // Consider if redirect is needed if no username
-    // }
+    const sessionChannel = supabaseClient?.channel('session_updates');
 
-    // REMOVED DUPLICATE handleBeforeUnload HERE - the correct one is in the other useEffect
+    if (sessionChannel) {
+      sessionChannel
+        .on('broadcast', { event: 'session_terminated' }, (message) => {
+          console.log('Broadcast received:', message);
+          // Check if the terminated session belongs to the current user
+          // This requires currentUserId state to be set from session details
+          if (message.payload && message.payload.userId && currentUserId && message.payload.userId.toString() === currentUserId) {
+            console.log(`Session termination event for current user (${currentUserId}). Logging out this tab.`);
+            handleStaleSession();
+          }
+        })
+        .subscribe((status) => {
+          if (status === 'SUBSCRIBED') {
+            console.log('Subscribed to session_updates channel.');
+          } else if (status === 'CHANNEL_ERROR') {
+            console.error('Error subscribing to session_updates channel.');
+          } else if (status === 'TIMED_OUT') {
+            console.warn('Subscription to session_updates channel timed out.');
+          }
+        });
+    }
 
     const handleBeforeUnload = (event: BeforeUnloadEvent) => {
       // Check isDeployed state at the moment of unload
