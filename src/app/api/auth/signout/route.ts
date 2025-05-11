@@ -3,28 +3,34 @@ import { createClient, SupabaseClient } from '@supabase/supabase-js';
 import { validateSession } from '@/lib/auth'; // Using the existing session validation
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
-const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+// const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY; // No longer using module-level anon client
+const supabaseServiceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY; // Added for service client
 
-if (!supabaseUrl || !supabaseAnonKey) {
-  console.error('Supabase URL or Anon Key is missing for /api/auth/signout. Check environment variables.');
+if (!supabaseUrl) {
+  console.error('Supabase URL is missing for /api/auth/signout. Check environment variables.');
 }
-const supabase: SupabaseClient = createClient(supabaseUrl || '', supabaseAnonKey || '');
+// Module-level Supabase client removed, will be created with service role key in handler.
 
 export async function POST(request: NextRequest) {
-  if (!supabaseUrl || !supabaseAnonKey) {
-    return NextResponse.json({ message: 'Server configuration error: Supabase not configured.' }, { status: 500 });
+  if (!supabaseUrl || !supabaseServiceRoleKey) {
+    return NextResponse.json({ message: 'Server configuration error: Supabase (service role) not configured.' }, { status: 500 });
   }
 
-  const session = await validateSession(request);
+  // Create a Supabase client with the service role key for this handler
+  const supabaseService: SupabaseClient = createClient(supabaseUrl, supabaseServiceRoleKey);
+
+  // validateSession from lib/auth already uses the service key for its DB reads.
+  // It expects headers from the request.
+  const session = await validateSession(request); 
   if (!session || !session.userId) {
     // If no valid session, or userId is somehow missing from session,
     // there's nothing to sign out on the server-side for this request.
-    // Client should still clear its local storage.
+    // Client should still clear its local storage/cookies.
     return NextResponse.json({ message: 'No active session to sign out or authentication invalid.' }, { status: 401 });
   }
 
   try {
-    const { error: updateError } = await supabase
+    const { error: updateError } = await supabaseService // Use service client
       .from("users")
       .update({
         session_token: null,
@@ -62,8 +68,21 @@ export async function POST(request: NextRequest) {
       console.error("Exception during signout broadcast:", e.message);
     }
     */
+    const response = NextResponse.json({ message: 'Sign out successful on server.' }, { status: 200 });
 
-    return NextResponse.json({ message: 'Sign out successful on server.' }, { status: 200 });
+    // Clear the cookies
+    const cookieOptions = {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === 'production',
+      path: '/',
+      maxAge: -1, // Expire the cookie immediately
+    };
+    response.cookies.set('sessionToken', '', cookieOptions);
+    response.cookies.set('sessionId', '', cookieOptions);
+    response.cookies.set('userId', '', cookieOptions);
+    response.cookies.set('username', '', cookieOptions);
+
+    return response;
 
   } catch (error: any) {
     console.error('Error in sign-out API route:', error.message);

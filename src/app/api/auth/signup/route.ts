@@ -1,18 +1,24 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
+import bcrypt from 'bcrypt';
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
-const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+// const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY; // No longer using module-level anon client
+const supabaseServiceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY; // Added for service client
 
-if (!supabaseUrl || !supabaseAnonKey) {
-  console.error('Supabase URL or Anon Key is missing for /api/auth/signup. Check environment variables.');
+if (!supabaseUrl) {
+  console.error('Supabase URL is missing for /api/auth/signup. Check environment variables.');
 }
-const supabase: SupabaseClient = createClient(supabaseUrl || '', supabaseAnonKey || '');
+// Module-level Supabase client removed, will be created with service role key in handler.
+const SALT_ROUNDS = 10; // Standard salt rounds for bcrypt
 
 export async function POST(request: NextRequest) {
-  if (!supabaseUrl || !supabaseAnonKey) {
-    return NextResponse.json({ message: 'Server configuration error: Supabase not configured.' }, { status: 500 });
+  if (!supabaseUrl || !supabaseServiceRoleKey) {
+    return NextResponse.json({ message: 'Server configuration error: Supabase (service role) not configured.' }, { status: 500 });
   }
+
+  // Create a Supabase client with the service role key for this handler
+  const supabaseService: SupabaseClient = createClient(supabaseUrl, supabaseServiceRoleKey);
 
   try {
     const { username, password, token: signupToken } = await request.json();
@@ -25,7 +31,7 @@ export async function POST(request: NextRequest) {
     }
 
     // 1. Verify Token (from client-side verifyToken)
-    const { data: tokenDataArray, error: tokenVerifyError } = await supabase
+    const { data: tokenDataArray, error: tokenVerifyError } = await supabaseService // Use service client
       .from('tokengenerate')
       .select('*')
       .eq('token', signupToken);
@@ -42,11 +48,12 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ message: 'Token has already been used.' }, { status: 400 });
     }
 
-    // 2. Insert User (from client-side handleSubmit)
-    // Note: Storing plain text password as in original. Consider hashing in a real app.
-    const { data: newUser, error: userInsertError } = await supabase
+    // 2. Hash password and Insert User
+    const hashedPassword = await bcrypt.hash(password, SALT_ROUNDS);
+
+    const { data: newUser, error: userInsertError } = await supabaseService // Use service client
       .from("users")
-      .insert([{ username, password, token: signupToken }]) // Assuming 'token' column in 'users' table stores the signup token
+      .insert([{ username, password: hashedPassword, token: signupToken }]) // Store hashed password
       .select()
       .single();
 
@@ -65,7 +72,7 @@ export async function POST(request: NextRequest) {
     const userId = newUser.id;
 
     // 3. Associate Token with User & Update Token Status (from client-side)
-    const { error: tokenUpdateError } = await supabase
+    const { error: tokenUpdateError } = await supabaseService // Use service client
       .from('tokengenerate')
       .update({ userid: userId, status: 'InUse' }) // Combine association and status update
       .eq('token', signupToken);

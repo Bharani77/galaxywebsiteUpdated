@@ -1,130 +1,50 @@
 "use client";
 
-import { useSearchParams, useRouter } from "next/navigation";
-import React, { Suspense, useEffect } from "react";
-import { createClient } from "@supabase/supabase-js";
-import { ToastContainer, toast } from 'react-toastify';
+import { useSearchParams, useRouter } from "next/navigation"; // useRouter might not be needed if redirects are fully middleware handled
+import React, { Suspense, useEffect, useCallback } from "react";
+import { ToastContainer, toast } from 'react-toastify'; // toast might still be used for other notifications
 import 'react-toastify/dist/ReactToastify.css';
 import GalaxyForm from './GalaxyForm';
 
-// Initialize Supabase client
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
-const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
-const supabase = createClient(supabaseUrl!, supabaseAnonKey!);
+// Supabase client and direct session validation logic removed.
+// Middleware will handle session validation before this page is rendered.
 
 function ProfileContent() {
     const searchParams = useSearchParams();
-    const router = useRouter();
-    const urlUsername = searchParams.get("username");
-    
-    const validateSession = async () => {
-        let userId: string | null = null;
-        let sessionId: string | null = null;
-        let storedUsername: string | null = null;
-        
-        try {
-            userId = sessionStorage.getItem("userId");
-            sessionId = sessionStorage.getItem("sessionId");
-            storedUsername = sessionStorage.getItem("username");
-        } catch {
-            router.push('/signin');
-            return;
-        }
+    // const router = useRouter(); // May not be needed if middleware handles all redirects
+    const urlUsername = searchParams.get("username"); // Still might be used for display or initial context
 
-        // First validate if URL username matches stored username
-        if (urlUsername !== storedUsername) {
-            sessionStorage.clear();
-            toast.error('Invalid URL. Redirecting to signin...');
-            router.push('/signin');
-            return;
-        }
+    // The handleLogoutAndRedirect and handleUserRemoval functions might still be relevant
+    // if GalaxyForm or other components trigger a logout or user removal action.
+    // However, the periodic validation is gone.
 
-        if (!userId || !sessionId) {
-            sessionStorage.clear();
-            router.push('/signin');
-            return;
-        }
+    // If the page loads, middleware has validated the session.
+    // We might still want to get the username from cookies for display,
+    // but this page component itself doesn't need to re-validate.
 
-        // Validate against database
-        const { data: user, error } = await supabase
-            .from("users")
-            .select("id, username, active_session_id, token")
-            .eq("id", userId)
-            .single();
+    // Example: If you need to display the username from the cookie (though it's httpOnly, so not directly accessible here)
+    // One option is for the middleware to add it to request headers, and a Server Component parent could pass it down.
+    // Or, the sign-in API could return it (as it does) and it could be stored in a React context or Zustand/Redux store
+    // if needed by multiple components, but not in sessionStorage for security tokens.
 
-        // Handle user not found or database error
-        if (error?.code === 'PGRST116' || !user) {
-            // User doesn't exist anymore
-            await handleUserRemoval(storedUsername);
-            return;
-        }
-
-        if (error) {
-            toast.error('Session validation failed');
-            router.push('/signin');
-            return;
-        }
-
-        // Check if token still exists and is valid
-        const { data: tokenData, error: tokenError } = await supabase
-            .from('tokengenerate')
-            .select('status')
-            .eq('token', user.token)
-            .single();
-
-        if (tokenError || !tokenData) {
-            // Token doesn't exist or is invalid
-            await handleUserRemoval(storedUsername);
-            return;
-        }
-
-        if (!user || user.active_session_id !== sessionId || user.username !== urlUsername) {
-            sessionStorage.clear();
-            router.push('/signin');
-            toast.error('Session expired. Please sign in again.');
-            return;
-        }
-    };
-
-    const handleUserRemoval = async (username: string | null) => {
-        if (username) {
-            try {
-                // Attempt to undeploy
-                await fetch('https://buddymaster77hugs-gradio.hf.space/api/undeploy', {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json'
-                    },
-                    body: JSON.stringify({
-                        modal_name: username
-                    })
-                });
-            } catch {
-                // Silently handle undeploy error
-            }
-        }
-        sessionStorage.clear();
-        toast.error('User access has been revoked');
-        router.push('/signin');
-    };
+    // For now, we assume GalaxyForm handles its needs, or username is passed if necessary.
+    // The primary change is removing the useEffect for polling validation.
 
     useEffect(() => {
+        // Basic check for URL username, though middleware should protect the route.
         if (!urlUsername) {
-            toast.error('Invalid URL. Redirecting to signin...');
-            router.push('/signin');
-            return;
+            // This case should ideally be caught by middleware redirecting if session is invalid
+            // or if the route is accessed directly without proper context.
+            // If middleware is correctly configured, this page shouldn't load without a valid session.
+            // toast.error('Invalid profile URL.'); // Consider if this is still needed
+            // router.push('/signin'); // Middleware should handle this
+            console.log("Profile page loaded, expecting middleware to have validated session.");
         }
-
-        validateSession();
-        
-        // Validate session every 5 seconds
-        const interval = setInterval(validateSession, 5000);
-
-        return () => clearInterval(interval);
-    }, [router, urlUsername]);
+        // No more polling validateClientSession
+    }, [urlUsername]);
 
     return (
-        <div className="min-h-screen flex flex-col items-center justify-center p-4 relative"> {/* Removed background gradient, will use global body background */}
+        <div className="min-h-screen flex flex-col items-center justify-center p-4 relative">
             {/* Logout button removed, handled by GalaxyForm component */}
             <ToastContainer
                 position="top-right"

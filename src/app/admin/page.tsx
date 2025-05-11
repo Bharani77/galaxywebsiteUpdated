@@ -26,34 +26,15 @@ export default function AdminLoginPage() {
 
     // Check if admin is already logged in
     useEffect(() => {
-        const checkAdminSession = async () => {
-            try {
-                // Check for admin session in localStorage instead of sessionStorage
-                const adminId = localStorage.getItem(ADMIN_STORAGE_KEYS.ADMIN_ID);
-                const adminUsername = localStorage.getItem(ADMIN_STORAGE_KEYS.ADMIN_USERNAME);
-                const adminSessionId = localStorage.getItem(ADMIN_STORAGE_KEYS.ADMIN_SESSION_ID);
-                
-                // If admin session exists, redirect to dashboard
-                if (adminId && adminUsername && adminSessionId) {
-                    router.push("/admin/dashboard");
-                    return;
-                }
-                
-                // Also check Supabase auth session as fallback
-                const { data: session } = await supabase.auth.getSession();
-                if (session && session.session) {
-                    router.push("/admin/dashboard");
-                    return;
-                }
-            } catch (error) {
-                console.error("Error checking admin session:", error);
-            } finally {
-                setLoading(false);
-            }
-        };
-        
-        checkAdminSession();
-    }, [router]);
+        // The middleware now handles redirecting an authenticated admin
+        // from /admin to /admin/dashboard.
+        // This client-side check might still be useful for a brief loading state
+        // or as a fallback, but the primary redirection is middleware-driven.
+        // We can simplify this or remove it if middleware is consistently handling it.
+        // For now, let's assume middleware handles the redirect if already logged in.
+        // If the page loads, it means middleware allowed it (i.e., not logged in as admin).
+        setLoading(false); 
+    }, []); // Empty dependency array, runs once on mount
 
     const handleSubmit = async (event: React.FormEvent) => {
         event.preventDefault();
@@ -68,17 +49,15 @@ export default function AdminLoginPage() {
                 body: JSON.stringify({ username, password }),
             });
 
-            const responseData = await response.json();
+            // const responseData = await response.json(); // We might not need all of responseData if just checking ok status
 
             if (response.ok) {
-                // Store admin session data in localStorage
-                localStorage.setItem(ADMIN_STORAGE_KEYS.ADMIN_ID, responseData.adminId);
-                localStorage.setItem(ADMIN_STORAGE_KEYS.ADMIN_USERNAME, responseData.adminUsername);
-                localStorage.setItem(ADMIN_STORAGE_KEYS.ADMIN_SESSION_ID, responseData.adminSessionId);
-                
-                // Redirect to dashboard
+                // Admin login successful, cookies are set by the backend.
+                // No need to store admin session data in localStorage.
+                // Redirect to dashboard. The middleware will also protect the dashboard.
                 router.push("/admin/dashboard");
             } else {
+                const responseData = await response.json().catch(() => ({ message: "Login failed. Please try again." }));
                 setError(responseData.message || "Login failed. Please try again.");
             }
         } catch (error) {

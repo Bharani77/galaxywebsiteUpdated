@@ -7,61 +7,68 @@ export interface AdminSession {
 }
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
-const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+// const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY; // No longer used for module-level client here
+const supabaseServiceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY; // Added for service client
 
-if (!supabaseUrl || !supabaseAnonKey) {
-  console.error('Supabase URL or Anon Key is missing for adminAuth. Check environment variables.');
+if (!supabaseUrl) {
+  console.error('Supabase URL is missing for adminAuth. Check environment variables.');
 }
-const supabase: SupabaseClient = createClient(supabaseUrl || '', supabaseAnonKey || '');
+// Module-level Supabase client removed as validateAdminSession will create its own service client.
 
 /**
- * Validates the admin session details from request headers.
+ * Validates the admin session details from cookies.
  * 
- * Expects:
- * - 'X-Admin-ID': 'ADMIN_ID_FROM_LOCALSTORAGE'
- * - 'X-Admin-Username': 'ADMIN_USERNAME_FROM_LOCALSTORAGE'
- * - 'X-Admin-Session-ID': 'ADMIN_SESSION_ID_FROM_LOCALSTORAGE' (currently not validated against DB)
+ * Expects cookies:
+ * - 'adminId'
+ * - 'adminUsername'
+ * - 'adminSessionId' (currently only checks for presence, not validated against DB)
  * 
  * @param request The NextRequest object.
  * @returns The admin session object if valid, otherwise null.
  */
 export async function validateAdminSession(request: NextRequest): Promise<AdminSession | null> {
-  if (!supabaseUrl || !supabaseAnonKey) {
-    console.error('Supabase client not initialized in validateAdminSession.');
+  if (!supabaseUrl || !supabaseServiceRoleKey) {
+    console.error('Supabase URL or Service Role Key is missing for admin session validation. Check environment variables.');
     return null;
   }
 
-  const adminId = request.headers.get('X-Admin-ID');
-  const adminUsername = request.headers.get('X-Admin-Username');
-  const adminSessionId = request.headers.get('X-Admin-Session-ID'); // Currently for presence, not DB validation
+  const adminIdCookie = request.cookies.get('adminId');
+  const adminUsernameCookie = request.cookies.get('adminUsername');
+  const adminSessionIdCookie = request.cookies.get('adminSessionId');
 
-  if (!adminId || !adminUsername || !adminSessionId) {
-    console.log('Missing Admin authentication headers.');
+  if (!adminIdCookie?.value || !adminUsernameCookie?.value || !adminSessionIdCookie?.value) {
+    console.log('Missing one or more admin session cookies (adminId, adminUsername, adminSessionId).');
     return null;
   }
+
+  const adminId = adminIdCookie.value;
+  const adminUsername = adminUsernameCookie.value;
+  // const adminSessionId = adminSessionIdCookie.value; // Available if needed for DB validation
+
+  // Create a Supabase client with the service role key for this specific function
+  const supabaseServiceAdmin: SupabaseClient = createClient(supabaseUrl, supabaseServiceRoleKey);
 
   try {
     // Basic validation: Check if an admin with this ID and username exists.
-    // A more robust solution would involve validating adminSessionId against a server-side store
-    // or using signed JWTs for admin sessions.
-    const { data: adminUser, error } = await supabase
-      .from('admin')
-      .select('id, username')
+    // TODO: For enhanced security, validate adminSessionId against a server-side admin_sessions table.
+    const { data: adminUserRecord, error } = await supabaseServiceAdmin
+      .from('admin') // Assuming your admin table is named 'admin'
+      .select('id, username') // Select fields to confirm existence
       .eq('id', adminId)
       .eq('username', adminUsername)
       .single();
 
-    if (error || !adminUser) {
-      console.error('Admin session validation failed (user not found or DB error):', error?.message);
+    if (error || !adminUserRecord) {
+      console.error('Admin session validation failed (admin user not found or DB error):', error?.message);
       return null;
     }
 
-    // If validation passes:
-    console.log('Admin session validated for:', adminUser.username);
-    return { adminId: adminUser.id.toString(), adminUsername: adminUser.username };
+    // If validation passes (admin exists with this ID and username):
+    console.log('Admin session validated via cookies for:', adminUserRecord.username);
+    return { adminId: adminUserRecord.id.toString(), adminUsername: adminUserRecord.username };
 
   } catch (e: any) {
-    console.error('Exception during admin session validation:', e.message);
+    console.error('Exception during admin session validation (cookies):', e.message);
     return null;
   }
 }

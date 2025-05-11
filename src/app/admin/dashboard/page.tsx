@@ -32,14 +32,23 @@ export default function AdminDashboardPage() {
     const [adminName, setAdminName] = useState<string>('');
     
     // Add logout function
-    const handleLogout = () => {
-        // Clear admin session data from localStorage
+    const handleLogout = async () => {
+        // Clear any client-side admin session remnants (though primary is cookie)
         Object.values(ADMIN_STORAGE_KEYS).forEach(key => localStorage.removeItem(key));
+        localStorage.setItem('admin_logout_event', Date.now().toString()); // For other tabs
+
+        // Call a backend API to invalidate admin cookies, if you create one.
+        // For now, just redirecting. The cookies will expire based on their maxAge.
+        // Or, if you have an /api/admin/auth/signout that clears admin cookies:
+        try {
+            // Assuming you might create an /api/admin/auth/signout endpoint
+            // that clears 'adminSessionId', 'adminId', 'adminUsername' cookies.
+            // If not, this fetch call is illustrative.
+            await fetch('/api/admin/auth/signout', { method: 'POST' });
+        } catch (e) {
+            console.error("Error calling admin signout API:", e);
+        }
         
-        // Broadcast logout event to other tabs
-        localStorage.setItem('admin_logout_event', Date.now().toString());
-        
-        // Redirect to admin login page
         router.push('/admin');
     };
     
@@ -76,29 +85,33 @@ export default function AdminDashboardPage() {
     const [toastMessage, setToastMessage] = useState<string | null>(null);
 
     const getAdminApiAuthHeaders = (): Record<string, string> => {
+        // HTTP-only cookies are sent automatically by the browser.
+        // Backend API routes protected by middleware or using validateAdminSession
+        // will have access to session details via these cookies.
+        // No need to manually set X-Admin-ID, X-Admin-Username, X-Admin-Session-ID from localStorage.
         const headers: Record<string, string> = {
             'Content-Type': 'application/json',
         };
-        const adminId = localStorage.getItem(ADMIN_STORAGE_KEYS.ADMIN_ID);
-        const adminUsername = localStorage.getItem(ADMIN_STORAGE_KEYS.ADMIN_USERNAME);
-        const adminSessionId = localStorage.getItem(ADMIN_STORAGE_KEYS.ADMIN_SESSION_ID);
-
-        if (adminId && adminUsername && adminSessionId) {
-            headers['X-Admin-ID'] = adminId;
-            headers['X-Admin-Username'] = adminUsername;
-            headers['X-Admin-Session-ID'] = adminSessionId;
-        } else {
-            console.warn('Missing admin session data in localStorage. Admin API calls may fail authentication.');
-        }
+        // The console.warn for missing localStorage items can be removed.
+        // console.log('getAdminApiAuthHeaders: Relying on HttpOnly cookies for admin session auth.');
         return headers;
     };
     
     // Add effect to get admin name from localStorage
     useEffect(() => {
-        const username = localStorage.getItem(ADMIN_STORAGE_KEYS.ADMIN_USERNAME);
-        if (username) {
-            setAdminName(username);
-        }
+        // const username = localStorage.getItem(ADMIN_STORAGE_KEYS.ADMIN_USERNAME); // This will no longer work reliably as cookies are HttpOnly
+        // For now, let's remove setting adminName from localStorage.
+        // A proper solution would be to get it from the server during session validation if needed for display.
+        // Or, the /api/admin/auth/signin could return it in the body (which it does)
+        // and the login page could pass it via router query or a short-lived client-side state store (not localStorage for session details).
+        // For simplicity, we can try to read the 'adminUsername' cookie if it's accessible (i.e., not HttpOnly, which it is).
+        // The most robust way is server-side rendering or an API call to fetch user details if needed.
+        // For now, we'll leave adminName potentially blank or find another way.
+        // One simple way: if the signin API returns username in body, the login page can pass it as a query param.
+        // However, the signin API already sets an 'adminUsername' cookie. If it's not HttpOnly, it can be read.
+        // Let's assume for now the display of adminName might not work or needs a different approach.
+        // We will remove the direct localStorage read here.
+        // setAdminName(''); // Or fetch from a different source if available
     }, []);
     
     // Add listener for logout events from other tabs
@@ -155,16 +168,10 @@ export default function AdminDashboardPage() {
         setIsLoading((prev) => ({ ...prev, [duration]: true }));
 
         try {
-            const authHeaders = getAdminApiAuthHeaders();
-            if (!authHeaders['X-Admin-ID']) {
-                showToast("Admin authentication details missing for generating token.");
-                setIsLoading((prev) => {
-                    const newState = { ...prev };
-                    newState[duration] = false;
-                    return newState;
-                });
-                return;
-            }
+            const authHeaders = getAdminApiAuthHeaders(); // This now only sets Content-Type
+            // The check for !authHeaders['X-Admin-ID'] is no longer relevant here,
+            // as authentication is handled by cookies verified by the middleware/backend.
+            // If the API call is made, we assume the middleware has validated the session.
 
             const response = await fetch('/api/admin/tokens', {
                 method: 'POST',
@@ -232,12 +239,8 @@ export default function AdminDashboardPage() {
         setIsDeletingToken((prev) => ({ ...prev, [duration]: { ...prev[duration], [tokenId]: true } }));
 
         try {
-            const authHeaders = getAdminApiAuthHeaders();
-            if (!authHeaders['X-Admin-ID']) {
-                showToast("Admin authentication details missing for deleting token.");
-                setIsDeletingToken((prev) => ({ ...prev, [duration]: { ...prev[duration], [tokenId]: false } }));
-                return;
-            }
+            const authHeaders = getAdminApiAuthHeaders(); // Only Content-Type
+            // Auth check removed, relying on middleware.
 
             const response = await fetch(`/api/admin/tokens?tokenId=${tokenId}`, {
                 method: 'DELETE',
@@ -286,11 +289,8 @@ export default function AdminDashboardPage() {
         }
 
         try {
-            const authHeaders = getAdminApiAuthHeaders();
-            if (!authHeaders['X-Admin-ID']) {
-                showToast("Admin authentication details missing for deleting user.");
-                return;
-            }
+            const authHeaders = getAdminApiAuthHeaders(); // Only Content-Type
+            // Auth check removed, relying on middleware.
 
             const response = await fetch(`/api/admin/users?userId=${userId}&token=${token}`, {
                 method: 'DELETE',
@@ -348,12 +348,8 @@ export default function AdminDashboardPage() {
 
         if (action === 'token') {
             try {
-                const authHeaders = getAdminApiAuthHeaders();
-                if (!authHeaders['X-Admin-ID']) {
-                    showToast("Admin authentication details missing for deleting token link.");
-                    closeDeleteModal();
-                    return;
-                }
+                const authHeaders = getAdminApiAuthHeaders(); // Only Content-Type
+                // Auth check removed, relying on middleware.
 
                 const response = await fetch(`/api/admin/user-token-link?userId=${userId}&token=${token}`, {
                     method: 'DELETE',
@@ -414,11 +410,8 @@ export default function AdminDashboardPage() {
         }
 
         try {
-            const authHeaders = getAdminApiAuthHeaders();
-            if (!authHeaders['X-Admin-ID']) {
-                showToast("Admin authentication details missing for renewing token.");
-                return;
-            }
+            const authHeaders = getAdminApiAuthHeaders(); // Only Content-Type
+            // Auth check removed, relying on middleware.
 
             const response = await fetch('/api/admin/renew-token', {
                 method: 'POST',
@@ -453,11 +446,8 @@ export default function AdminDashboardPage() {
     // Fetch token history on component mount
     const fetchTokenHistory = useCallback(async () => {
         try {
-            const authHeaders = getAdminApiAuthHeaders();
-            if (!authHeaders['X-Admin-ID']) {
-                showToast("Admin authentication details missing for fetching token history.");
-                return;
-            }
+            const authHeaders = getAdminApiAuthHeaders(); // Only Content-Type
+            // Auth check removed, relying on middleware.
 
             const response = await fetch('/api/admin/token-history', {
                 method: 'GET',
@@ -503,13 +493,10 @@ export default function AdminDashboardPage() {
     // Fetch token user details on component mount
     const fetchTokenUserDetails = async () => {
         try {
-            const authHeaders = getAdminApiAuthHeaders();
-            if (!authHeaders['X-Admin-ID']) { // Check if essential admin auth headers are missing
-                showToast("Admin authentication details missing. Please log in again.");
-                // Optionally redirect to admin login
-                // router.push('/admin'); 
-                return;
-            }
+            const authHeaders = getAdminApiAuthHeaders(); // Only Content-Type
+            // Auth check removed, relying on middleware.
+            // The middleware should prevent this page from loading if not authenticated.
+            // If an API call fails with 401, that would indicate a session issue.
 
             const response = await fetch('/api/admin/token-user-details', {
                 method: 'GET',

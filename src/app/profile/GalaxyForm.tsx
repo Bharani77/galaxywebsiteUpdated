@@ -65,20 +65,14 @@ interface LatestUserRunResponse {
 }
 
 const getApiAuthHeaders = (): Record<string, string> => {
+  // HTTP-only cookies are sent automatically by the browser.
+  // Backend API routes protected by middleware or using validateSession (from lib/auth)
+  // will have access to session details via cookies.
+  // No need to manually set Authorization, X-User-ID, X-Session-ID from sessionStorage.
   const headers: Record<string, string> = {
     'Content-Type': 'application/json',
   };
-  const token = sessionStorage.getItem('sessionToken');
-  const userId = sessionStorage.getItem('userId');
-  const sessionId = sessionStorage.getItem('sessionId');
-
-  if (token && userId && sessionId) {
-    headers['Authorization'] = `Bearer ${token}`;
-    headers['X-User-ID'] = userId;
-    headers['X-Session-ID'] = sessionId;
-  } else {
-    console.warn('Missing critical session data (token, userId, or sessionId) in sessionStorage. API calls will proceed without authentication headers.');
-  }
+  // console.log('getApiAuthHeaders: Relying on HttpOnly cookies for session auth.');
   return headers;
 };
   
@@ -101,22 +95,40 @@ const getApiAuthHeaders = (): Record<string, string> => {
         await handleUndeploy(); 
       } catch (err) {
         console.error("Error during undeploy on logout:", err);
+        // Proceed with logout even if undeploy fails
       }
     }
-    sessionStorage.clear();
+    
+    try {
+      // Call the backend signout API which will clear HttpOnly cookies
+      const response = await fetch('/api/auth/signout', { 
+        method: 'POST',
+        headers: getApiAuthHeaders(), // Send content-type, cookies are auto-sent
+      }); 
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        console.error('Logout API call failed:', errorData.message || response.statusText);
+        // Still attempt to clear client-side and redirect
+      }
+    } catch (apiError) {
+      console.error('Error calling logout API:', apiError);
+      // Still attempt to clear client-side and redirect
+    }
+
+    // Clear any client-side storage (e.g., username if stored for display)
+    sessionStorage.removeItem('username'); 
+    // Potentially clear other session-related items if any were stored.
+    // sessionStorage.clear(); // Use this if you want to clear everything from sessionStorage
+
     router.push('/signin');
   };
 
   const checkInitialDeploymentStatus = async (logicalUsernameToCheck: string) => {
     setDeploymentStatus('Checking deployment status...');
     try {
-      const authHeaders = getApiAuthHeaders();
-      if (!authHeaders['Authorization']) {
-        setDeploymentStatus('Authentication details missing. Please sign in again.');
-        setIsDeployed(false);
-        setShowDeployPopup(true);
-        return;
-      }
+      const authHeaders = getApiAuthHeaders(); // Primarily for Content-Type now
+      // The check for authHeaders['Authorization'] is removed as middleware handles auth.
+      // If this point is reached, middleware should have validated the session cookies.
 
       console.log(`Fetching latest run status for job name based on: ${logicalUsernameToCheck} via /api/git/latest-user-run`);
       const response = await fetch(`/api/git/latest-user-run?logicalUsername=${logicalUsernameToCheck}`, { headers: authHeaders });
@@ -188,50 +200,31 @@ const getApiAuthHeaders = (): Record<string, string> => {
       // but for sendBeacon, we fire it if there's a chance it's deployed.
       // The backend will re-validate the session and actual deployment status.
 
-      const currentToken = sessionStorage.getItem('sessionToken');
-      const currentUserId = sessionStorage.getItem('userId');
-      const currentSessionId = sessionStorage.getItem('sessionId');
+    // const currentToken = sessionStorage.getItem('sessionToken'); // No longer using sessionToken from sessionStorage
+    // const currentUserId = sessionStorage.getItem('userId'); // No longer using userId from sessionStorage
+    // const currentSessionId = sessionStorage.getItem('sessionId'); // No longer using sessionId from sessionStorage
 
-      // A simple check: if there's a token, there might be a session and deployment.
-      // The backend /api/auth/beacon-signout-undeploy will do the full validation.
-      if (currentToken && currentUserId && currentSessionId) {
-        if (navigator.sendBeacon) {
-          // navigator.sendBeacon expects data. We send a minimal JSON payload.
-          // The crucial part is that the browser should send cookies,
-          // and our backend /api/auth/beacon-signout-undeploy uses validateSession which expects headers.
-          // This is a known limitation/complexity of sendBeacon with header-based auth.
-          // We are sending an empty JSON body as placeholder, the backend relies on headers.
-          
-          // To pass headers with sendBeacon, they must be part of the request object
-          // that sendBeacon itself constructs. Custom headers are tricky.
-          // The most reliable way is if your auth can work off cookies that the browser sends automatically.
-          // Since validateSession is header-based, this is a best-effort attempt.
-          
-          // Create a FormData object to send. This is a common way to use sendBeacon.
-          // However, our backend expects headers for validateSession.
-          // Let's try sending a POST request with an empty body, hoping the
-          // browser includes necessary cookies or that the server can handle it.
-          // The custom headers 'Authorization', 'X-User-ID', 'X-Session-ID'
-          // are NOT reliably sent by navigator.sendBeacon.
-          // The backend API /api/auth/beacon-signout-undeploy/route.ts
-          // calls validateSession(request) which reads these from headers.
-          // This will likely fail if the browser doesn't attach them.
-          // This is a fundamental limitation. The backend might need adjustment
-          // for beacon-specific auth if this proves unreliable.
+    // sendBeacon relies on cookies being sent automatically by the browser.
+    // Our /api/auth/beacon-signout-undeploy route uses validateSession, which now reads from cookies.
+    // So, if cookies are present and sent by the browser, this should work.
+    // We no longer need to check sessionStorage for tokens here.
+    // A simple check for `username` in sessionStorage might indicate an active session from client's perspective.
+    const storedUser = sessionStorage.getItem('username');
 
-          // For now, we'll just fire the beacon. The backend will log if session is invalid.
-          const beaconUrl = '/api/auth/beacon-signout-undeploy';
-          navigator.sendBeacon(beaconUrl); 
-          console.log('Attempted to send beacon for signout and undeploy.');
-        } else {
-          console.warn('navigator.sendBeacon is not available.');
-          // Fallback for older browsers (less reliable) - synchronous XHR
-          // This is generally discouraged as it blocks page unload.
-        }
+    if (storedUser) { // If there's a username, assume a session might be active.
+      if (navigator.sendBeacon) {
+        const beaconUrl = '/api/auth/beacon-signout-undeploy';
+        // sendBeacon with POST and a body (even empty) is common.
+        // Cookies should be sent automatically by the browser.
+        navigator.sendBeacon(beaconUrl, new Blob([JSON.stringify({})], {type : 'application/json'})); 
+        console.log('Attempted to send beacon for signout and undeploy. Backend will use cookies for session validation.');
+      } else {
+        console.warn('navigator.sendBeacon is not available.');
       }
-    };
+    }
+  };
 
-    window.addEventListener('beforeunload', handleBeforeUnload);
+  window.addEventListener('beforeunload', handleBeforeUnload);
 
     return () => {
       if (activationProgressTimerId !== null) {
@@ -258,13 +251,8 @@ const getApiAuthHeaders = (): Record<string, string> => {
     const jobNameToFind = `Run for ${suffixedUsernameForJobSearch}`; 
     console.log(`Initiating workflow run search. Target job name: "${jobNameToFind}"`);
 
-    const authHeaders = getApiAuthHeaders();
-    if (!authHeaders['Authorization']) {
-      setDeploymentStatus('Authentication details missing for deployment check. Please sign in again.');
-      setIsPollingStatus(false);
-      setRedeployMode(true);
-      return;
-    }
+    const authHeaders = getApiAuthHeaders(); // Primarily for Content-Type
+    // The check for authHeaders['Authorization'] is removed.
 
     let findRunIdTimer: number | null = null;
     const findRunIdTimeoutDuration = 30 * 1000;
@@ -395,12 +383,8 @@ const getApiAuthHeaders = (): Record<string, string> => {
     let timer: number | null = null;
   
     console.log(`Polling for cancellation of run ID: ${runId}`);
-    const authHeaders = getApiAuthHeaders();
-    if (!authHeaders['Authorization']) {
-      setDeploymentStatus('Authentication details missing for cancellation poll. Please sign in again.');
-      setIsUndeploying(false); 
-      return;
-    }
+    const authHeaders = getApiAuthHeaders(); // Primarily for Content-Type
+    // The check for authHeaders['Authorization'] is removed.
 
     const check = async () => {
       console.log(`pollForCancelledStatus: Checking run ${runId}...`);
@@ -477,11 +461,8 @@ const getApiAuthHeaders = (): Record<string, string> => {
     setIsUndeploying(true); setShowDeployPopup(true);
     setDeploymentStatus('Attempting to cancel current deployment...');
 
-    const authHeaders = getApiAuthHeaders();
-    if (!authHeaders['Authorization']) {
-      setDeploymentStatus('Authentication details missing. Please sign in again.');
-      setIsUndeploying(false); setShowDeployPopup(true); return;
-    }
+    const authHeaders = getApiAuthHeaders(); // Primarily for Content-Type
+    // The check for authHeaders['Authorization'] is removed.
     
     const suffixedUsernameForJobSearch = username; 
 
@@ -542,13 +523,8 @@ const getApiAuthHeaders = (): Record<string, string> => {
     setShowDeployPopup(true); 
     setDeploymentStatus('Dispatching workflow...'); 
     
-    const authHeaders = getApiAuthHeaders();
-    if (!authHeaders['Authorization']) {
-      setDeploymentStatus('Authentication details missing for deploy. Please sign in again.');
-      setIsDeploying(false);
-      setRedeployMode(true);
-      return;
-    }
+    const authHeaders = getApiAuthHeaders(); // Primarily for Content-Type
+    // The check for authHeaders['Authorization'] is removed.
     
     try {
       const response = await fetch(`/git/galaxyapi/workflow-dispatch`, {
@@ -680,12 +656,8 @@ const getApiAuthHeaders = (): Record<string, string> => {
     setButtonStates(prev => ({ ...prev, [action]: { ...prev[action], loading: true } }));
     setError([]);
 
-    const authHeaders = getApiAuthHeaders();
-    if (!authHeaders['Authorization']) {
-      setError(['Authentication details missing. Please sign in again.']);
-      setButtonStates(prev => ({ ...prev, [action]: { ...prev[action], loading: false } }));
-      return;
-    }
+    const authHeaders = getApiAuthHeaders(); // Primarily for Content-Type
+    // The check for authHeaders['Authorization'] is removed.
 
     try {
       if (!username) { 

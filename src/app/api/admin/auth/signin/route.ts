@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
 import crypto from 'crypto'; // Import crypto module
+import bcrypt from 'bcrypt'; // Import bcrypt
+// No need to import cookies from next/headers for setting, use NextResponse.cookies
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
 const supabaseServiceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY; // Use service role key
@@ -44,26 +46,40 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ message: "Invalid username or password." }, { status: 401 });
     }
 
-    // IMPORTANT: Plain text password comparison, as in the original client-side code.
-    // In a production application, passwords should be hashed.
-    if (adminUser.password !== password) {
+    // Compare hashed password (assuming admin passwords in DB are hashed)
+    // If admin passwords are not yet hashed, this will fail.
+    // This change assumes you will update admin passwords in the DB to be hashed.
+    const passwordIsValid = await bcrypt.compare(password, adminUser.password);
+    if (!passwordIsValid) {
+      console.log(`Admin password validation failed for admin: ${username}.`);
       return NextResponse.json({ message: "Invalid username or password." }, { status: 401 });
     }
 
     // Authentication successful, generate admin session ID
-    const adminSessionId = generateSessionId();
+    const adminSessionId = generateSessionId(); // This is a new session ID for this login
 
-    // Here, you might want to store this adminSessionId in your database associated with the adminUser.id
-    // if you need to validate it server-side for other admin-protected API routes.
-    // The current client-side code only stores it in localStorage.
-    // For now, just returning it as the client expects.
+    // TODO: Consider storing this adminSessionId in an admin_sessions table in your DB,
+    // associated with adminUser.id, for more robust server-side session validation.
+    // For now, we'll set it in a cookie.
 
-    return NextResponse.json({
+    const response = NextResponse.json({
       message: 'Admin login successful.',
-      adminId: adminUser.id.toString(),
-      adminUsername: adminUser.username,
-      adminSessionId: adminSessionId
+      adminUsername: adminUser.username, // Return username for potential client-side display
     });
+
+    const oneDayInSeconds = 24 * 60 * 60;
+    const cookieOptions = {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === 'production',
+      path: '/', // Or restrict to /admin paths: path: '/admin',
+      maxAge: oneDayInSeconds,
+    };
+
+    response.cookies.set('adminSessionId', adminSessionId, cookieOptions);
+    response.cookies.set('adminId', adminUser.id.toString(), cookieOptions);
+    response.cookies.set('adminUsername', adminUser.username, cookieOptions);
+    
+    return response;
 
   } catch (error: any) {
     console.error('Error in admin sign-in API route:', error.message);
