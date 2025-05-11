@@ -1,5 +1,10 @@
 import { SupabaseClient, createClient } from '@supabase/supabase-js'; // Import createClient
-import { updateUserDeployStatus } from '@/lib/auth'; // Assuming updateUserDeployStatus is exported from auth
+import { updateUserDeployStatus } from '@/lib/auth'; 
+import { fetchFromGitHub, GitHubRun } from '@/lib/githubApiUtils'; // Import for direct GitHub API calls
+
+// Constants for GitHub API, mirroring those in /git/galaxyapi/runs/route.ts
+const GITHUB_ORG = process.env.NEXT_PUBLIC_GITHUB_ORG || 'GalaxyKickLock';
+const GITHUB_REPO = process.env.NEXT_PUBLIC_GITHUB_REPO || 'GalaxyKickPipeline';
 
 /**
  * Generates the logical username for loca.lt services.
@@ -88,31 +93,28 @@ export async function performServerSideUndeploy(
 
           while (Date.now() - pollStartTime < pollTimeout) {
             try {
-              // Construct the absolute URL for the API route
-              const currentUrl = new URL(process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'); // Fallback for local
-              const runsApiUrl = new URL(`/git/galaxyapi/runs?runId=${activeRunId}`, currentUrl);
-              
-              const ghResponse = await fetch(runsApiUrl.toString(), {
-                method: 'GET', // Assuming GET to fetch run status
-                headers: { 'Content-Type': 'application/json' }, // Add any necessary auth if this API is protected
-              });
+              const githubRunEndpoint = `/repos/${GITHUB_ORG}/${GITHUB_REPO}/actions/runs/${activeRunId}`;
+              const ghApiResponse = await fetchFromGitHub(githubRunEndpoint); // fetchFromGitHub returns a NextResponse
 
-              if (ghResponse.ok) {
-                const runDetails = await ghResponse.json();
+              if (ghApiResponse.ok) {
+                const runDetails: GitHubRun = await ghApiResponse.json(); // Assuming fetchFromGitHub's ok response contains GitHubRun
                 if (runDetails.status === 'completed' && runDetails.conclusion === 'cancelled') {
                   console.log(`[ServerUndeploy] Run ID ${activeRunId} confirmed cancelled on GitHub.`);
                   runCancelled = true;
                   break;
                 } else if (runDetails.status === 'completed') {
                   console.log(`[ServerUndeploy] Run ID ${activeRunId} completed with conclusion: ${runDetails.conclusion} (not cancelled).`);
-                  break; // Stop polling if completed but not cancelled
+                  break; 
                 }
-                // Continue polling if still in progress or queued
+                // Continue polling if status is 'in_progress', 'queued', etc.
+                console.log(`[ServerUndeploy] Run ID ${activeRunId} status: ${runDetails.status}. Polling again.`);
               } else {
-                console.warn(`[ServerUndeploy] Error fetching GitHub run status for ${activeRunId}: ${ghResponse.status}. Will retry.`);
+                // fetchFromGitHub already logs errors, but we can add context
+                console.warn(`[ServerUndeploy] Error fetching GitHub run status for ${activeRunId} via fetchFromGitHub. Status: ${ghApiResponse.status}. Will retry.`);
               }
             } catch (ghError: any) {
-              console.error(`[ServerUndeploy] Exception during GitHub run status poll for ${activeRunId}: ${ghError.message}. Will retry.`);
+              // This catch might be for JSON parsing errors if fetchFromGitHub's ok response isn't valid JSON
+              console.error(`[ServerUndeploy] Exception during GitHub run status poll for ${activeRunId} (e.g. JSON parse): ${ghError.message}. Will retry.`);
             }
             await new Promise(resolve => setTimeout(resolve, pollInterval));
           }
