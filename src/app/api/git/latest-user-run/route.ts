@@ -49,14 +49,13 @@ export async function GET(request: NextRequest) {
     const runsEndpoint = `/repos/${ORG}/${REPO}/actions/workflows/${WORKFLOW_FILE_NAME}/runs?per_page=30`;
     const runsResult = await fetchFromGitHub(runsEndpoint);
 
-    if (runsResult instanceof NextResponse) { // Error from fetchFromGitHub
-      return runsResult;
-    }
-    if (!runsResult.ok || !runsResult.rawData) {
-      return NextResponse.json({ message: runsResult.error || 'Failed to fetch workflow runs.' }, { status: runsResult.status || 500 });
+    if (!runsResult.ok) {
+      // runsResult is already a NextResponse containing the error
+      console.error(`Failed to fetch workflow runs. Status: ${runsResult.status}`);
+      return runsResult; 
     }
 
-    const runsResponse = runsResult.rawData as GitHubWorkflowRunsResponse;
+    const runsResponse = await runsResult.json() as GitHubWorkflowRunsResponse;
     if (!runsResponse.workflow_runs || runsResponse.workflow_runs.length === 0) {
       return NextResponse.json({ message: `No workflow runs found for ${WORKFLOW_FILE_NAME}.` }, { status: 404 });
     }
@@ -72,16 +71,15 @@ export async function GET(request: NextRequest) {
       const jobsEndpoint = `/repos/${ORG}/${REPO}/actions/runs/${run.id}/jobs`;
       const jobsResult = await fetchFromGitHub(jobsEndpoint);
 
-      if (jobsResult instanceof NextResponse) {
+      if (!jobsResult.ok) {
+        // jobsResult is already a NextResponse containing the error
         console.warn(`Could not fetch jobs for run ${run.id}, skipping. Status: ${jobsResult.status}`);
-        continue; // Skip this run if jobs can't be fetched
-      }
-      if (!jobsResult.ok || !jobsResult.rawData) {
-        console.warn(`Could not fetch jobs data for run ${run.id}, skipping. Error: ${jobsResult.error}`);
+        // Optionally, parse jobsResult.json() if you want to log a specific message from its body
+        // For now, just log status and continue.
         continue; 
       }
       
-      const jobsData = jobsResult.rawData as GitHubRunJobsResponse;
+      const jobsData = await jobsResult.json() as GitHubRunJobsResponse;
       if (jobsData.jobs && jobsData.jobs.length > 0) {
         const matchingJob = jobsData.jobs.find(job => job.name === targetJobName);
         if (matchingJob) {

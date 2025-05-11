@@ -62,12 +62,12 @@ export async function fetchFromGitHub(
 
   try {
     const rawData = await response.json();
-    // Return the raw data and status, let the caller decide on NextResponse packaging for GETs
-    return { rawData, status: response.status, ok: true };
+    // Always return a NextResponse
+    return NextResponse.json(rawData, { status: response.status });
   } catch (e: any) {
     console.error(`Failed to parse JSON response from GitHub for URL ${url}. Status: ${response.status}`, e.message);
-    // Return an error structure that the caller can turn into a NextResponse
-    return { error: 'Failed to parse response from GitHub.', status: 502, ok: false };
+    // Always return a NextResponse for errors too
+    return NextResponse.json({ message: 'Failed to parse response from GitHub.' }, { status: 502 });
   }
 }
 
