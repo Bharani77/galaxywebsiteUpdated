@@ -25,10 +25,10 @@ export default function SignInPage() {
     const router = useRouter();
     const sessionChannel = useRef<any>(null);
 
-    const showToast = (message: string, type: 'success' | 'error' = 'error') => {
+    const showToast = (message: string, type: 'success' | 'error' | 'info' = 'error') => { // Added 'info' type
         toast[type](message, {
             position: "top-right",
-            autoClose: 3000,
+            autoClose: type === 'info' ? 7000 : 3000, // Longer for info messages
             hideProgressBar: false,
             closeOnClick: true,
             pauseOnHover: true,
@@ -150,8 +150,16 @@ export default function SignInPage() {
         if (isLoading) return;
         
         setIsLoading(true);
+        let longLoginTimerId: NodeJS.Timeout | null = null;
+
+        // Set a timer to show a more specific message if login takes too long
+        longLoginTimerId = setTimeout(() => {
+            showToast("Finalizing previous session, this may take a bit longer. Please wait...", 'info');
+        }, 7000); // Show after 7 seconds if still loading
+
         try {
             if (!validateInputs()) {
+                if (longLoginTimerId) clearTimeout(longLoginTimerId);
                 setIsLoading(false);
                 return;
             }
@@ -163,31 +171,27 @@ export default function SignInPage() {
                 },
                 body: JSON.stringify({ username, password }),
             });
+            
+            if (longLoginTimerId) clearTimeout(longLoginTimerId); // Clear timer as fetch has completed
 
             const data = await response.json();
 
             if (response.ok) {
-                // The /api/auth/signin route sets HttpOnly cookies for sessionToken, userId, sessionId.
-                // These are not (and should not be) in data.sessionToken, data.userId, data.sessionId.
-                // The `username` is in data.username.
-                // sessionStorage.setItem(STORAGE_KEYS.USERNAME, data.username); // Store username if needed for display elsewhere
-                // clearSessionStorage(); // Clear any old session data that might conflict
-                // storeSessionData is problematic with HttpOnly cookies. Commenting out for now.
-                // storeSessionData(data.sessionToken, data.userId, data.username, data.sessionId); 
-                
+                // sessionStorage.setItem(STORAGE_KEYS.USERNAME, data.username); // Store username if needed
                 showToast(data.message || "Successfully signed in!", 'success');
                 setTimeout(() => {
-                    completeLoginFlow(); // Navigates to profile page
+                    completeLoginFlow(); 
                 }, 1000);
             } else {
                 if (response.status === 409) {
-                    // Specific message for undeploy conflict
-                    showToast(data.message || "Sign-in is taking longer than usual as we finalize your previous session. Please hold on or try again in a moment.", 'error');
+                    // Server indicates undeploy issue (timeout or failure)
+                    showToast(data.message || "Previous session cleanup encountered an issue. Please try signing in again.", 'error');
                 } else {
                     showToast(data.message || "Sign in failed. Please try again.", 'error');
                 }
             }
         } catch (error) {
+            if (longLoginTimerId) clearTimeout(longLoginTimerId);
             console.error("Sign in error:", error);
             showToast("An error occurred during sign in. Please check your connection.");
         } finally {
