@@ -66,9 +66,10 @@ export async function POST(request: NextRequest) {
     if (user.active_session_id) {
       console.log(`[SignIn] User ${user.username} (ID: ${user.id}) is signing in, potentially terminating existing session ${user.active_session_id}.`);
 
-      // Check if there's an active deployment for this user that needs to be undeployed
-      if (user.deploy_timestamp && user.active_form_number) {
-        console.log(`[SignIn] User ${user.username} has an active deployment (Form: ${user.active_form_number}, Timestamp: ${user.deploy_timestamp}). Attempting server-side undeploy.`);
+      // Check if there's an active deployment (especially a GitHub run) for this user that needs to be undeployed
+      if (user.deploy_timestamp && user.active_run_id) { 
+        // Log details including active_form_number even if it's null, for complete context
+        console.log(`[SignIn] User ${user.username} has active GitHub deployment. DB values - Timestamp: ${user.deploy_timestamp}, Form: ${user.active_form_number}, RunID: ${user.active_run_id}. Attempting server-side undeploy.`);
         
         // Pass supabaseService to performServerSideUndeploy if it's designed to accept it,
         // or ensure it creates its own client if not.
