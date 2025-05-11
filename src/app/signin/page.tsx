@@ -167,13 +167,25 @@ export default function SignInPage() {
             const data = await response.json();
 
             if (response.ok) {
-                storeSessionData(data.sessionToken, data.userId, data.username, data.sessionId);
+                // The /api/auth/signin route sets HttpOnly cookies for sessionToken, userId, sessionId.
+                // These are not (and should not be) in data.sessionToken, data.userId, data.sessionId.
+                // The `username` is in data.username.
+                // sessionStorage.setItem(STORAGE_KEYS.USERNAME, data.username); // Store username if needed for display elsewhere
+                // clearSessionStorage(); // Clear any old session data that might conflict
+                // storeSessionData is problematic with HttpOnly cookies. Commenting out for now.
+                // storeSessionData(data.sessionToken, data.userId, data.username, data.sessionId); 
+                
                 showToast(data.message || "Successfully signed in!", 'success');
                 setTimeout(() => {
                     completeLoginFlow(); // Navigates to profile page
                 }, 1000);
             } else {
-                showToast(data.message || "Sign in failed. Please try again.");
+                if (response.status === 409) {
+                    // Specific message for undeploy conflict
+                    showToast(data.message || "Sign-in is taking longer than usual as we finalize your previous session. Please hold on or try again in a moment.", 'error');
+                } else {
+                    showToast(data.message || "Sign in failed. Please try again.", 'error');
+                }
             }
         } catch (error) {
             console.error("Sign in error:", error);
