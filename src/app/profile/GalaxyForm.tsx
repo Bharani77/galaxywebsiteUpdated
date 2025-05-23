@@ -389,7 +389,8 @@ const GalaxyForm: React.FC = () => {
     setIsPollingStatus(true); setRedeployMode(false);
     const jobNameToFind = `Run for ${suffixedUsernameForJobSearch}`;
     const authHeaders = getApiAuthHeaders();
-    const findRunIdTimeoutDuration = 30 * 1000; const findRunIdInterval = 5 * 1000;
+    const findRunIdTimeoutDuration = 90 * 1000; // Increased from 30s to 90s
+    const findRunIdInterval = 5 * 1000;
     const findRunIdStartTime = Date.now();
     const attemptToFindRunId = async () => {
       const attemptNumber = Math.floor((Date.now() - findRunIdStartTime) / findRunIdInterval) + 1;
@@ -397,7 +398,7 @@ const GalaxyForm: React.FC = () => {
       if (Date.now() - findRunIdStartTime > findRunIdTimeoutDuration) {
         if (findRunIdTimerRef.current !== null) window.clearInterval(findRunIdTimerRef.current);
         findRunIdTimerRef.current = null;
-        setDeploymentStatus('Could not locate the triggered workflow run in time.');
+        setDeploymentStatus('Could not locate the triggered workflow run in time. Please try redeploying.');
         setIsPollingStatus(false); setRedeployMode(true); return;
       }
       try {
