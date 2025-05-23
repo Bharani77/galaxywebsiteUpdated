@@ -630,7 +630,7 @@ const GalaxyForm: React.FC = () => {
               </div>
             )}
             <div style={{ display: 'flex', justifyContent: 'center', marginTop: (isDeployed && isPollingStatus && activationProgressTimerId !== null) ? '0' : '20px' }}>
-              {(!isDeployed || redeployMode) && !(isDeploying || (isPollingStatus && activationProgressTimerId !== null)) ? (
+              {(!isDeployed || redeployMode) && !isDeploying && !(isPollingStatus && activationProgressTimerId !== null) ? ( // Only show button if not deployed OR in redeploy mode, AND not currently deploying/activating
                 <button onClick={handleDeploy} disabled={isDeploying || (isPollingStatus && activationProgressTimerId === null)} style={{ padding: '10px 20px', borderRadius: '4px', border: 'none', backgroundColor: (isDeploying || (isPollingStatus && activationProgressTimerId === null)) ? '#555' : (redeployMode ? '#e67e22' : '#d32f2f'), color: 'white', fontWeight: 'bold', cursor: (isDeploying || (isPollingStatus && activationProgressTimerId === null)) ? 'not-allowed' : 'pointer', opacity: (isDeploying || (isPollingStatus && activationProgressTimerId === null)) ? 0.7 : 1, transition: 'all 0.3s ease', width: '100%' }} >
                   {isDeploying ? 'Dispatching...' : (isPollingStatus && activationProgressTimerId === null) ? 'Checking Status...' : (redeployMode ? 'Redeploy Again' : 'Deploy KickLock')}
                 </button>
