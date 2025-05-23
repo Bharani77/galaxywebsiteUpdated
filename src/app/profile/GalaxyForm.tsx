@@ -26,18 +26,18 @@ const initialButtonStates: ButtonStates = {
   update: { loading: false, active: false, text: 'Update' },
 };
 
-const STORAGE_KEYS = { USER_ID: 'userId', USERNAME: 'username' };
+const STORAGE_KEYS = { USER_ID: 'userId', USERNAME: 'username', FORMS_DATA: 'galaxyFormsData' };
 
 const GalaxyForm: React.FC = () => {
   const router = useRouter();
   const [isClient, setIsClient] = useState(false);
   const [activeTab, setActiveTab] = useState<number>(1);
-  const [username, setUsername] = useState<string | null>(null); 
+  const [username, setUsername] = useState<string | null>(null);
   const [displayedUsername, setDisplayedUsername] = useState<string | null>(null);
-  const [showDeployPopup, setShowDeployPopup] = useState<boolean>(false); 
+  const [showDeployPopup, setShowDeployPopup] = useState<boolean>(false);
   const [isDeploying, setIsDeploying] = useState<boolean>(false);
   const [isUndeploying, setIsUndeploying] = useState<boolean>(false);
-  const [deploymentStatus, setDeploymentStatus] = useState<string>('Checking deployment status...'); 
+  const [deploymentStatus, setDeploymentStatus] = useState<string>('Checking deployment status...');
   const [isDeployed, setIsDeployed] = useState<boolean>(false);
   const [isPollingStatus, setIsPollingStatus] = useState<boolean>(false);
   const [redeployMode, setRedeployMode] = useState<boolean>(false);
@@ -48,8 +48,8 @@ const GalaxyForm: React.FC = () => {
   const [autoUndeployMessage, setAutoUndeployMessage] = useState<string | null>(null);
   const [showAutoUndeployPopup, setShowAutoUndeployPopup] = useState<boolean>(false);
   const [tokenExpiryDisplay, setTokenExpiryDisplay] = useState<string | null>(null);
-  const [currentUserIdState, setCurrentUserIdState] = useState<string | null>(null); 
-  
+  const [currentUserIdState, setCurrentUserIdState] = useState<string | null>(null);
+
   const findRunIdTimerRef = useRef<number | null>(null);
   const statusPollTimerRef = useRef<number | null>(null);
   const cancelPollTimerRef = useRef<number | null>(null);
@@ -65,22 +65,40 @@ const GalaxyForm: React.FC = () => {
     statusPollTimerRef.current = null;
     if (cancelPollTimerRef.current !== null) window.clearInterval(cancelPollTimerRef.current);
     cancelPollTimerRef.current = null;
-  }, []); 
-  
+  }, []);
+
   const formNames = { 1: 'Kick 1', 2: 'Kick 2', 3: 'Kick 3', 4: 'Kick 4', 5: 'Kick 5' };
 
-  const [formData1, setFormData1] = useState<FormData>({ RC: '', startAttackTime: '', stopAttackTime: '', attackIntervalTime: '', startDefenceTime: '', stopDefenceTime: '', defenceIntervalTime: '', PlanetName: '', Rival: '' });
-  const [formData2, setFormData2] = useState<FormData>({ RC: '', startAttackTime: '', stopAttackTime: '', attackIntervalTime: '', startDefenceTime: '', stopDefenceTime: '', defenceIntervalTime: '', PlanetName: '', Rival: '' });
-  const [formData3, setFormData3] = useState<FormData>({ RC: '', startAttackTime: '', stopAttackTime: '', attackIntervalTime: '', startDefenceTime: '', stopDefenceTime: '', defenceIntervalTime: '', PlanetName: '', Rival: '' });
-  const [formData4, setFormData4] = useState<FormData>({ RC: '', startAttackTime: '', stopAttackTime: '', attackIntervalTime: '', startDefenceTime: '', stopDefenceTime: '', defenceIntervalTime: '', PlanetName: '', Rival: '' });
-  const [formData5, setFormData5] = useState<FormData>({ RC: '', startAttackTime: '', stopAttackTime: '', attackIntervalTime: '', startDefenceTime: '', stopDefenceTime: '', defenceIntervalTime: '', PlanetName: '', Rival: '' });
-  
+  // Initialize formData states with a function that attempts to load from local storage
+  const getInitialFormData = (formNum: number): FormData => {
+    if (typeof window !== 'undefined') {
+      const savedData = localStorage.getItem(STORAGE_KEYS.FORMS_DATA);
+      if (savedData) {
+        try {
+          const parsedData = JSON.parse(savedData);
+          if (parsedData[`formData${formNum}`]) {
+            return parsedData[`formData${formNum}`];
+          }
+        } catch (e) {
+          console.error("Failed to parse form data from local storage", e);
+        }
+      }
+    }
+    return { RC: '', startAttackTime: '', stopAttackTime: '', attackIntervalTime: '', startDefenceTime: '', stopDefenceTime: '', defenceIntervalTime: '', PlanetName: '', Rival: '' };
+  };
+
+  const [formData1, setFormData1] = useState<FormData>(getInitialFormData(1));
+  const [formData2, setFormData2] = useState<FormData>(getInitialFormData(2));
+  const [formData3, setFormData3] = useState<FormData>(getInitialFormData(3));
+  const [formData4, setFormData4] = useState<FormData>(getInitialFormData(4));
+  const [formData5, setFormData5] = useState<FormData>(getInitialFormData(5));
+
   const [buttonStates1, setButtonStates1] = useState<ButtonStates>(initialButtonStates);
   const [buttonStates2, setButtonStates2] = useState<ButtonStates>(initialButtonStates);
   const [buttonStates3, setButtonStates3] = useState<ButtonStates>(initialButtonStates);
   const [buttonStates4, setButtonStates4] = useState<ButtonStates>(initialButtonStates);
   const [buttonStates5, setButtonStates5] = useState<ButtonStates>(initialButtonStates);
-  
+
   const [error1, setError1] = useState<string[]>([]); const [error2, setError2] = useState<string[]>([]); const [error3, setError3] = useState<string[]>([]);
   const [error4, setError4] = useState<string[]>([]); const [error5, setError5] = useState<string[]>([]);
 
@@ -104,7 +122,8 @@ const GalaxyForm: React.FC = () => {
         if (runDetails.status === 'completed' && runDetails.conclusion === 'cancelled') {
           if (cancelPollTimerRef.current !== null) window.clearInterval(cancelPollTimerRef.current);
           cancelPollTimerRef.current = null; setDeploymentStatus('Deployment successfully cancelled.');
-          setIsDeployed(false); setIsUndeploying(false); setIsPollingStatus(false); setShowDeployPopup(true); setRedeployMode(false);
+          setIsDeployed(false); // Ensure isDeployed is false after successful cancellation
+          setIsUndeploying(false); setIsPollingStatus(false); setShowDeployPopup(true); setRedeployMode(true); // Set redeployMode to true
         } else if (runDetails.status === 'completed') {
           if (cancelPollTimerRef.current !== null) window.clearInterval(cancelPollTimerRef.current);
           cancelPollTimerRef.current = null; setDeploymentStatus(`Undeploy failed: Workflow completed (${runDetails.conclusion}), not cancelled.`);
@@ -460,6 +479,23 @@ const GalaxyForm: React.FC = () => {
     }
   }, [username, clearAllPollingTimers, activationProgressTimerId, startDeploymentCheck, /*setters:*/ setActivationProgressTimerId, setActivationProgressPercent, setIsDeploying, setRedeployMode, setShowDeployPopup, setDeploymentStatus, setIsPollingStatus, setIsDeployed]);
   
+  const saveAllFormDataToLocalStorage = useCallback(() => {
+    if (typeof window !== 'undefined') {
+      const allFormData = {
+        formData1,
+        formData2,
+        formData3,
+        formData4,
+        formData5,
+      };
+      localStorage.setItem(STORAGE_KEYS.FORMS_DATA, JSON.stringify(allFormData));
+    }
+  }, [formData1, formData2, formData3, formData4, formData5]);
+
+  useEffect(() => {
+    saveAllFormDataToLocalStorage();
+  }, [formData1, formData2, formData3, formData4, formData5, saveAllFormDataToLocalStorage]);
+
   const handleInputChange = (formNumber: number) => (e: React.ChangeEvent<HTMLInputElement>) => {
     const { name, value } = e.target;
     const timeFields = ['startAttackTime', 'stopAttackTime', 'attackIntervalTime', 'startDefenceTime', 'stopDefenceTime', 'defenceIntervalTime'];
@@ -467,7 +503,7 @@ const GalaxyForm: React.FC = () => {
     const setFormData = [setFormData1, setFormData2, setFormData3, setFormData4, setFormData5][formNumber-1];
     setFormData(prev => ({ ...prev, [name]: numericValue }));
   };
-  
+
   const handleAction = (formNumber: number) => async (action: ActionType) => {
     const formDataSetters = [setButtonStates1, setButtonStates2, setButtonStates3, setButtonStates4, setButtonStates5];
     const errorSetters = [setError1, setError2, setError3, setError4, setError5];
@@ -498,7 +534,7 @@ const GalaxyForm: React.FC = () => {
         if (errorData.autoUndeployed) {
           setAutoUndeployMessage(errorData.message); setShowAutoUndeployPopup(true); setIsDeployed(false); setRedeployMode(true);
           [setButtonStates1, setButtonStates2, setButtonStates3, setButtonStates4, setButtonStates5].forEach(setter => setter(initialButtonStates));
-          setError([]); 
+          setError([]);
         } else {
           setError([`Conflict: ${errorData.message || 'Please try again'}`]);
           setButtonStates(prev => ({ ...prev, [action]: { ...prev[action], loading: false, active: false, text: action } }));
