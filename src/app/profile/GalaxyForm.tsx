@@ -630,15 +630,15 @@ const GalaxyForm: React.FC = () => {
               </div>
             )}
             <div style={{ display: 'flex', justifyContent: 'center', marginTop: (isDeployed && isPollingStatus && activationProgressTimerId !== null) ? '0' : '20px' }}>
-              {/* Show button if not deployed OR in redeploy mode, AND not currently deploying/activating, AND NOT currently polling status */}
-              {(!isDeployed || redeployMode) && !isDeploying && !isPollingStatus ? (
-                <button onClick={handleDeploy} disabled={isDeploying || isPollingStatus} style={{ padding: '10px 20px', borderRadius: '4px', border: 'none', backgroundColor: (isDeploying || isPollingStatus) ? '#555' : (redeployMode ? '#e67e22' : '#d32f2f'), color: 'white', fontWeight: 'bold', cursor: (isDeploying || isPollingStatus) ? 'not-allowed' : 'pointer', opacity: (isDeploying || isPollingStatus) ? 0.7 : 1, transition: 'all 0.3s ease', width: '100%' }} >
-                  {isDeploying ? 'Dispatching...' : (redeployMode ? 'Redeploy Again' : 'Deploy KickLock')}
+              {/* Show Redeploy Again button if in redeploy mode and not currently deploying/activating */}
+              {redeployMode && !isDeploying && !isPollingStatus ? (
+                <button onClick={handleDeploy} disabled={isDeploying || isPollingStatus} style={{ padding: '10px 20px', borderRadius: '4px', border: 'none', backgroundColor: (isDeploying || isPollingStatus) ? '#555' : '#e67e22', color: 'white', fontWeight: 'bold', cursor: (isDeploying || isPollingStatus) ? 'not-allowed' : 'pointer', opacity: (isDeploying || isPollingStatus) ? 0.7 : 1, transition: 'all 0.3s ease', width: '100%' }} >
+                  Redeploy Again
                 </button>
               ) : (isDeployed && !redeployMode && !isPollingStatus && activationProgressTimerId === null) ? ( <p style={{color: '#22c55e'}}>Deployment is active!</p> ) : null}
             </div>
-            {/* Only show close button if not polling, not deploying, not deployed, not in redeploy mode, and not activating */}
-            {(!isPollingStatus && !isDeploying && !isDeployed && !redeployMode && activationProgressTimerId === null) && (
+            {/* Show close button if not deploying or activating */}
+            {(!isDeploying && activationProgressTimerId === null) && (
               <button onClick={() => setShowDeployPopup(false)} style={{marginTop: '15px', background: 'none', border: '1px solid #555', color: '#aaa', padding: '5px 10px', borderRadius: '4px'}}> Close </button>
             )}
           </div>
