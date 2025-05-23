@@ -88,9 +88,9 @@ export async function performServerSideUndeploy(
     }
   }
 
-  // Poll GitHub Actions if activeRunId is provided, regardless of loca.lt outcome
-  let githubPollSuccess = true; 
-  let githubPollMessage = "No GitHub Action polling required or attempted.";
+  // Attempt to cancel GitHub Actions run if activeRunId is provided, without polling.
+  let githubCancelSuccess = true;
+  let githubCancelMessage = "No GitHub Action cancellation required or attempted.";
 
   if (activeRunId) {
     console.log(`[ServerUndeploy] Active run ID ${activeRunId} found. Attempting to request cancellation via GitHub API.`);
@@ -99,56 +99,17 @@ export async function performServerSideUndeploy(
       const cancelApiResponse = await fetchFromGitHub(cancelEndpoint, { method: 'POST' });
       if (cancelApiResponse.ok || cancelApiResponse.status === 202) { // 202 Accepted is success for cancel
         console.log(`[ServerUndeploy] GitHub API request to cancel run ${activeRunId} sent successfully (Status: ${cancelApiResponse.status}).`);
+        githubCancelMessage = `GitHub Action run ${activeRunId} cancellation request sent.`;
       } else {
-        // Log error but proceed to polling, as run might already be stopping or cancelled.
+        githubCancelSuccess = false;
         const errorText = await cancelApiResponse.text().catch(() => `Status ${cancelApiResponse.status}`);
-        console.warn(`[ServerUndeploy] GitHub API request to cancel run ${activeRunId} failed or was not 200/202. Status: ${cancelApiResponse.status}, Response: ${errorText}. Will proceed to poll status.`);
-        // Do not set githubPollSuccess = false here yet, polling will determine final state.
+        githubCancelMessage = `Failed to send cancellation request for GitHub run ${activeRunId}: ${cancelApiResponse.status} ${errorText}.`;
+        console.error(`[ServerUndeploy] ${githubCancelMessage}`);
       }
     } catch (cancelError: any) {
-      console.error(`[ServerUndeploy] Exception calling GitHub API to cancel run ${activeRunId}: ${cancelError.message}. Will proceed to poll status.`);
-    }
-
-    console.log(`[ServerUndeploy] Now polling GitHub for actual cancellation of run ID: ${activeRunId}`);
-    const pollTimeout = 55000; // 55 seconds, to be less than typical 60s serverless timeout
-    const pollInterval = 5 * 1000; // 5 seconds
-    let pollStartTime = Date.now();
-    let runCancelled = false;
-
-    while (Date.now() - pollStartTime < pollTimeout) {
-      try {
-        const githubRunEndpoint = `/repos/${GITHUB_ORG}/${GITHUB_REPO}/actions/runs/${activeRunId}`;
-        const ghApiResponse = await fetchFromGitHub(githubRunEndpoint);
-        if (ghApiResponse.ok) {
-          const runDetails: GitHubRun = await ghApiResponse.json();
-          if (runDetails.status === 'completed' && runDetails.conclusion === 'cancelled') {
-            console.log(`[ServerUndeploy] Run ID ${activeRunId} confirmed cancelled on GitHub.`);
-            runCancelled = true;
-            githubPollMessage = `GitHub Action run ${activeRunId} confirmed cancelled.`;
-            break;
-          } else if (runDetails.status === 'completed') {
-            githubPollMessage = `GitHub Action run ${activeRunId} completed with ${runDetails.conclusion} (not cancelled).`;
-            console.log(`[ServerUndeploy] ${githubPollMessage}`);
-            githubPollSuccess = false; // Or true depending on if "not cancelled" is acceptable
-            break;
-          }
-          console.log(`[ServerUndeploy] Run ID ${activeRunId} status: ${runDetails.status}. Polling again.`);
-        } else {
-          githubPollMessage = `Error fetching GitHub run status for ${activeRunId}: ${ghApiResponse.status}.`;
-          console.warn(`[ServerUndeploy] ${githubPollMessage} Will retry.`);
-          // No 'githubPollSuccess = false' here, as retry might succeed.
-        }
-      } catch (ghError: any) {
-        githubPollMessage = `Exception during GitHub run status poll for ${activeRunId}: ${ghError.message}.`;
-        console.error(`[ServerUndeploy] ${githubPollMessage} Will retry.`);
-      }
-      await new Promise(resolve => setTimeout(resolve, pollInterval));
-    }
-
-    if (!runCancelled && (Date.now() - pollStartTime >= pollTimeout)) {
-      githubPollMessage = `Timed out waiting for GitHub run ${activeRunId} to be cancelled.`;
-      console.warn(`[ServerUndeploy] ${githubPollMessage}`);
-      githubPollSuccess = false; // Timeout is a failure to confirm cancellation.
+      githubCancelSuccess = false;
+      githubCancelMessage = `Exception calling GitHub API to cancel run ${activeRunId}: ${cancelError.message}.`;
+      console.error(`[ServerUndeploy] ${githubCancelMessage}`);
     }
   }
 
@@ -156,9 +117,9 @@ export async function performServerSideUndeploy(
   await updateUserDeployStatus(userId, null, null, null); // Clear timestamp, formNumber, and runId
   console.log(`[ServerUndeploy] Cleared all deployment fields (timestamp, form, runId) in Supabase for user ${userId}.`);
 
-  const overallSuccess = locaLtStopSuccess && githubPollSuccess;
-  const finalMessage = `loca.lt: ${locaLtMessage} GitHub: ${githubPollMessage} DB status cleared.`;
-  
+  const overallSuccess = locaLtStopSuccess && githubCancelSuccess; // Use githubCancelSuccess
+  const finalMessage = `loca.lt: ${locaLtMessage} GitHub: ${githubCancelMessage} DB status cleared.`; // Use githubCancelMessage
+
   if (overallSuccess) {
     return { success: true, message: finalMessage };
   } else {
