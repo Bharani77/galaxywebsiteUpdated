@@ -446,8 +446,11 @@ const GalaxyForm: React.FC = () => {
         setIsDeployed(false); setIsPollingStatus(false); setRedeployMode(true);
       }
     } catch (error) {
-      setIsDeploying(false); setDeploymentStatus(`Dispatch error: ${error instanceof Error ? error.message : 'Unknown error'}`);
-      setIsDeployed(false); setIsPollingStatus(false); setRedeployMode(true);
+      setIsDeploying(false);
+      setDeploymentStatus(`Dispatch error: ${error instanceof Error ? error.message : 'Unknown error'}`);
+      setIsDeployed(false);
+      setIsPollingStatus(false); // Ensure polling status is false on dispatch error
+      setRedeployMode(true);
     }
   }, [username, clearAllPollingTimers, activationProgressTimerId, startDeploymentCheck, /*setters:*/ setActivationProgressTimerId, setActivationProgressPercent, setIsDeploying, setRedeployMode, setShowDeployPopup, setDeploymentStatus, setIsPollingStatus, setIsDeployed]);
   
