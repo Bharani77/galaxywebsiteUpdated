@@ -201,25 +201,25 @@ const GalaxyForm: React.FC = () => {
           const data = await response.json() as LatestUserRunResponse;
           const isActiveStatus = data.status === 'in_progress' || data.status === 'queued';
           if (isActiveStatus) {
-            setIsDeployed(true); setShowDeployPopup(false); setRedeployMode(false);
+            setIsDeployed(true); setShowDeployPopup(false); setRedeployMode(false); setIsPollingStatus(false);
             setDeploymentStatus(`Active deployment detected (Run ID: ${data.runId}, Status: ${data.status}).`);
           } else {
-            setIsDeployed(false); setShowDeployPopup(true); setRedeployMode(true);
+            setIsDeployed(false); setShowDeployPopup(true); setRedeployMode(true); setIsPollingStatus(false);
             setDeploymentStatus(`Deployment not active. Latest run: ${data.status} (Conclusion: ${data.conclusion || 'N/A'}). Redeploy if needed.`);
           }
         } else if (response.status === 404) {
-          setIsDeployed(false); setShowDeployPopup(true); setRedeployMode(true);
+          setIsDeployed(false); setShowDeployPopup(true); setRedeployMode(true); setIsPollingStatus(false);
           setDeploymentStatus('No deployment found for your user. Deployment is required.');
         } else {
           const errorData = await response.json();
           setDeploymentStatus(`Error checking status: ${errorData.message || 'Please try again.'}`);
-          setIsDeployed(false); setShowDeployPopup(true); setRedeployMode(true);
+          setIsDeployed(false); setShowDeployPopup(true); setRedeployMode(true); setIsPollingStatus(false);
         }
       } catch (error) {
         setDeploymentStatus('Error connecting for status check. Please try again.');
-        setIsDeployed(false); setShowDeployPopup(true); setRedeployMode(true);
+        setIsDeployed(false); setShowDeployPopup(true); setRedeployMode(true); setIsPollingStatus(false);
       }
-    }, [setDeploymentStatus, setIsDeployed, setShowDeployPopup, setRedeployMode]);
+    }, [setDeploymentStatus, setIsDeployed, setShowDeployPopup, setRedeployMode, setIsPollingStatus]);
 
   const handleStaleSession = useCallback(async () => {
     setToastMessage('This session has been logged out by a new login elsewhere. Redirecting...');
@@ -367,8 +367,14 @@ const GalaxyForm: React.FC = () => {
           }, 1000);
           setActivationProgressTimerId(newActivationTimerId);
         } else {
-          setDeploymentStatus(`Workflow status: ${runDetails.status} (Conclusion: ${runDetails.conclusion || 'N/A'}). Waiting...`);
-          statusPollTimerRef.current = window.setTimeout(performStatusPoll, pollIntervalTime);
+          // If status is not 'in_progress', it means it's completed, cancelled, or failed.
+          // In these cases, stop polling and set redeploy mode.
+          if (statusPollTimerRef.current !== null) window.clearInterval(statusPollTimerRef.current);
+          statusPollTimerRef.current = null;
+          setDeploymentStatus(`Workflow status: ${runDetails.status} (Conclusion: ${runDetails.conclusion || 'N/A'}). Redeploy if needed.`);
+          setIsDeployed(false); // Ensure isDeployed is false if not in_progress
+          setIsPollingStatus(false); // Stop polling
+          setRedeployMode(true); // Enable redeploy button
         }
       } catch (pollError) {
         if (statusPollTimerRef.current !== null) window.clearInterval(statusPollTimerRef.current);
