@@ -226,8 +226,8 @@ export default function SignUpPage() {
                             </h3>
                             <ul style={{ listStyle: 'none', paddingLeft: '0', color: '#ccc', fontSize: '0.95rem' }}>
                                 <li style={{ marginBottom: '8px' }}>1. Prices may change based on demand.</li>
-                                <li style={{ marginBottom: '8px' }}>2. Tokens issued ONLY after successful payment.</li>
-                                <li style={{ marginBottom: '8px' }}>3. Latest app updates included by default.* Subject to future change</li>
+                                <li style={{ marginBottom: '8px' }}>2. Tokens issued ONLY after successful transfer of Fire Cannon Balls to the owner's account.</li>
+                                <li style={{ marginBottom: '8px' }}>3. Latest app updates included by default. * Subject to future change</li>
                             </ul>
                         </div>
                     </div>
