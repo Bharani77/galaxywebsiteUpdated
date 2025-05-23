@@ -161,65 +161,65 @@ const GalaxyForm: React.FC = () => {
           setDeploymentStatus(`No active (in_progress/queued) deployment found for job "Run for ${suffixedUsernameForJobSearch}" to cancel. Latest status: ${latestRunData.status}.`); 
           setIsUndeploying(false); setShowDeployPopup(true); return; 
         }
-      } else if (latestRunResponse.status === 404) {
-        setDeploymentStatus(`No active deployment found for job "Run for ${suffixedUsernameForJobSearch}" to cancel.`); 
-        setIsUndeploying(false); setIsDeployed(false); setRedeployMode(false); setShowDeployPopup(true); return;
-      } else { throw new Error(`Failed to fetch latest run for undeploy: ${latestRunResponse.status} ${await latestRunResponse.text()}`); }
-    } catch (error: any) {
-      setDeploymentStatus(`Error during undeploy: ${error.message}. You may need to redeploy.`);
-      setIsUndeploying(false); setIsDeployed(false); setRedeployMode(true); setShowDeployPopup(true);
-    }
-  }, [username, clearAllPollingTimers, activationProgressTimerId, pollForCancelledStatus, setActivationProgressTimerId, setActivationProgressPercent, setButtonStates1, setButtonStates2, setButtonStates3, setButtonStates4, setButtonStates5, setError1, setError2, setError3, setError4, setError5, setIsUndeploying, setIsPollingStatus, setShowDeployPopup, setDeploymentStatus, setIsDeployed, setRedeployMode ]);
+        } else if (latestRunResponse.status === 404) {
+          setDeploymentStatus(`No active deployment found for job "Run for ${suffixedUsernameForJobSearch}" to cancel.`);
+          setIsUndeploying(false); setIsDeployed(false); setRedeployMode(true); setShowDeployPopup(true); return;
+        } else { throw new Error(`Failed to fetch latest run for undeploy: ${latestRunResponse.status} ${await latestRunResponse.text()}`); }
+      } catch (error: any) {
+        setDeploymentStatus(`Error during undeploy: ${error.message}. You may need to redeploy.`);
+        setIsUndeploying(false); setIsDeployed(false); setRedeployMode(true); setShowDeployPopup(true);
+      }
+    }, [username, clearAllPollingTimers, activationProgressTimerId, pollForCancelledStatus, setActivationProgressTimerId, setActivationProgressPercent, setButtonStates1, setButtonStates2, setButtonStates3, setButtonStates4, setButtonStates5, setError1, setError2, setError3, setError4, setError5, setIsUndeploying, setIsPollingStatus, setShowDeployPopup, setDeploymentStatus, setIsDeployed, setRedeployMode ]);
   
-  const handleLogout = useCallback(async () => {
-    if (activationProgressTimerId !== null) {
-      window.clearInterval(activationProgressTimerId);
-      setActivationProgressTimerId(null);
-    }
-    if (isDeployed) {
-      setShowDeployPopup(true); 
-      try { await handleUndeploy(); } catch (err) { console.error("Error during undeploy on logout:", err); }
-    }
-    try {
-      const response = await fetch('/api/auth/signout', { method: 'POST', headers: getApiAuthHeaders() }); 
-      if (!response.ok) {
-        const errorData = await response.json().catch(() => ({}));
-        console.error('Logout API call failed:', errorData.message || response.statusText);
+    const handleLogout = useCallback(async () => {
+      if (activationProgressTimerId !== null) {
+        window.clearInterval(activationProgressTimerId);
+        setActivationProgressTimerId(null);
       }
-    } catch (apiError) { console.error('Error calling logout API:', apiError); }
-    sessionStorage.removeItem(STORAGE_KEYS.USERNAME); 
-    sessionStorage.removeItem(STORAGE_KEYS.USER_ID);
-    router.push('/signin');
-  }, [activationProgressTimerId, isDeployed, router, handleUndeploy, setActivationProgressTimerId, setShowDeployPopup]);
-
-  const checkInitialDeploymentStatus = useCallback(async (logicalUsernameToCheck: string) => {
-    setDeploymentStatus('Checking deployment status...');
-    try {
-      const authHeaders = getApiAuthHeaders();
-      const response = await fetch(`/api/git/latest-user-run?logicalUsername=${logicalUsernameToCheck}`, { headers: authHeaders });
-      if (response.ok) {
-        const data = await response.json() as LatestUserRunResponse;
-        const isActiveStatus = data.status === 'in_progress' || data.status === 'queued';
-        if (isActiveStatus) {
-          setIsDeployed(true); setShowDeployPopup(false);
-          setDeploymentStatus(`Active deployment detected (Run ID: ${data.runId}, Status: ${data.status}).`);
-        } else {
-          setIsDeployed(false); setShowDeployPopup(true);
-          setDeploymentStatus(`Deployment not active. Latest run: ${data.status} (Conclusion: ${data.conclusion || 'N/A'}). Redeploy if needed.`);
+      if (isDeployed) {
+        setShowDeployPopup(true);
+        try { await handleUndeploy(); } catch (err) { console.error("Error during undeploy on logout:", err); }
+      }
+      try {
+        const response = await fetch('/api/auth/signout', { method: 'POST', headers: getApiAuthHeaders() });
+        if (!response.ok) {
+          const errorData = await response.json().catch(() => ({}));
+          console.error('Logout API call failed:', errorData.message || response.statusText);
         }
-      } else if (response.status === 404) {
-        setIsDeployed(false); setShowDeployPopup(true);
-        setDeploymentStatus('No deployment found for your user. Deployment is required.');
-      } else {
-        const errorData = await response.json();
-        setDeploymentStatus(`Error checking status: ${errorData.message || 'Please try again.'}`);
-        setIsDeployed(false); setShowDeployPopup(true);
+      } catch (apiError) { console.error('Error calling logout API:', apiError); }
+      sessionStorage.removeItem(STORAGE_KEYS.USERNAME);
+      sessionStorage.removeItem(STORAGE_KEYS.USER_ID);
+      router.push('/signin');
+    }, [activationProgressTimerId, isDeployed, router, handleUndeploy, setActivationProgressTimerId, setShowDeployPopup]);
+  
+    const checkInitialDeploymentStatus = useCallback(async (logicalUsernameToCheck: string) => {
+      setDeploymentStatus('Checking deployment status...');
+      try {
+        const authHeaders = getApiAuthHeaders();
+        const response = await fetch(`/api/git/latest-user-run?logicalUsername=${logicalUsernameToCheck}`, { headers: authHeaders });
+        if (response.ok) {
+          const data = await response.json() as LatestUserRunResponse;
+          const isActiveStatus = data.status === 'in_progress' || data.status === 'queued';
+          if (isActiveStatus) {
+            setIsDeployed(true); setShowDeployPopup(false); setRedeployMode(false);
+            setDeploymentStatus(`Active deployment detected (Run ID: ${data.runId}, Status: ${data.status}).`);
+          } else {
+            setIsDeployed(false); setShowDeployPopup(true); setRedeployMode(true);
+            setDeploymentStatus(`Deployment not active. Latest run: ${data.status} (Conclusion: ${data.conclusion || 'N/A'}). Redeploy if needed.`);
+          }
+        } else if (response.status === 404) {
+          setIsDeployed(false); setShowDeployPopup(true); setRedeployMode(true);
+          setDeploymentStatus('No deployment found for your user. Deployment is required.');
+        } else {
+          const errorData = await response.json();
+          setDeploymentStatus(`Error checking status: ${errorData.message || 'Please try again.'}`);
+          setIsDeployed(false); setShowDeployPopup(true); setRedeployMode(true);
+        }
+      } catch (error) {
+        setDeploymentStatus('Error connecting for status check. Please try again.');
+        setIsDeployed(false); setShowDeployPopup(true); setRedeployMode(true);
       }
-    } catch (error) {
-      setDeploymentStatus('Error connecting for status check. Please try again.');
-      setIsDeployed(false); setShowDeployPopup(true);
-    }
-  }, [setDeploymentStatus, setIsDeployed, setShowDeployPopup]);
+    }, [setDeploymentStatus, setIsDeployed, setShowDeployPopup, setRedeployMode]);
 
   const handleStaleSession = useCallback(async () => {
     setToastMessage('This session has been logged out by a new login elsewhere. Redirecting...');
