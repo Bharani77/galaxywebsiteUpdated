@@ -45,6 +45,14 @@ export default function SignUpPage() {
                 return;
             }
 
+            // Add username validation: alphanumeric only, no spaces or special characters
+            const usernameRegex = /^[a-zA-Z0-9]+$/;
+            if (!usernameRegex.test(username)) {
+                showToast("Username can only contain alphanumeric characters (A-Z, a-z, 0-9) and no spaces or special characters.");
+                setIsLoading(false);
+                return;
+            }
+
             // Add password validation
             if (password.length < 8) {
                 showToast("Password must be at least 8 characters long.");
