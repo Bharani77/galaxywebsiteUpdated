@@ -627,7 +627,7 @@ const GalaxyForm: React.FC = () => {
             {isDeployed && isPollingStatus && activationProgressTimerId !== null && (
               <div style={{ marginBottom: '20px', width: '100%', backgroundColor: '#333', borderRadius: '4px', overflow: 'hidden' }}>
                 <div style={{ width: `${activationProgressPercent}%`, height: '10px', backgroundColor: '#22c55e', transition: 'width 0.5s ease-in-out' }} />
-              </div>
+F              </div>
             )}
             <div style={{ display: 'flex', justifyContent: 'center', marginTop: (isDeployed && isPollingStatus && activationProgressTimerId !== null) ? '0' : '20px' }}>
               {/* Show Redeploy Again button if in redeploy mode and not currently deploying/activating */}

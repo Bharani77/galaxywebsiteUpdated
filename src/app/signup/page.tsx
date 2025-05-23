@@ -1,15 +1,11 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
+import React, { useState } from "react"; // useEffect removed as sessionStorage logic is no longer needed
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { ToastContainer, toast } from 'react-toastify';
 import 'react-toastify/dist/ReactToastify.css';
-import { X, DollarSign, FileText, Info } from 'lucide-react'; // Import necessary icons
-
-// const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL; // No longer needed
-// const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY; // No longer needed
-// const supabase = createClient(supabaseUrl!, supabaseAnonKey!); // No longer needed
+import { X, DollarSign, FileText, Info, MessageCircle } from 'lucide-react'; // Added MessageCircle for Discord representation
 
 export default function SignUpPage() {
     const [username, setUsername] = useState("");
@@ -17,17 +13,7 @@ export default function SignUpPage() {
     const [token, setToken] = useState("");
     const [isLoading, setIsLoading] = useState(false);
     const [showTokenInfoPopup, setShowTokenInfoPopup] = useState(false);
-    const [hasTokenInfoPopupBeenShown, setHasTokenInfoPopupBeenShown] = useState(false);
     const router = useRouter();
-
-    useEffect(() => {
-        if (typeof window !== 'undefined') {
-            const shown = sessionStorage.getItem('tokenInfoPopupShown');
-            if (shown === 'true') {
-                setHasTokenInfoPopupBeenShown(true);
-            }
-        }
-    }, []);
 
     const showToast = (message: string, type: 'success' | 'error' = 'error') => {
         toast[type](message, {
@@ -152,20 +138,18 @@ export default function SignUpPage() {
                     </div>
 
                     <div className="form-group">
-                        <label className="block text-white text-sm font-semibold mb-2 text-left w-full">
-                            Token
+                        <label className="block text-white text-sm font-semibold mb-2 text-left w-full" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                            <span>Token</span>
+                            <Info
+                                size={16}
+                                style={{ cursor: 'pointer', color: '#00FFFF', marginLeft: '5px' }}
+                                onClick={() => setShowTokenInfoPopup(true)}
+                            />
                         </label>
                         <input
                             type="text"
                             value={token}
                             onChange={(e) => setToken(e.target.value)}
-                            onClick={() => {
-                                if (!hasTokenInfoPopupBeenShown) {
-                                    setShowTokenInfoPopup(true);
-                                    setHasTokenInfoPopupBeenShown(true);
-                                    sessionStorage.setItem('tokenInfoPopupShown', 'true');
-                                }
-                            }}
                             className="input-field"
                             placeholder="Enter token"
                             disabled={isLoading}
@@ -215,36 +199,35 @@ export default function SignUpPage() {
                         </button>
 
                         <h2 style={{ color: '#fff', marginBottom: '20px', fontSize: '1.8rem', textAlign: 'center', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                            <Info size={28} style={{ marginRight: '10px', color: '#00FFFF' }} /> Token Information
+                            <Info size={28} style={{ marginRight: '10px', color: '#00FFFF' }} /> Token Details
                         </h2>
 
                         <p style={{ color: '#ccc', marginBottom: '20px', fontSize: '1rem', lineHeight: '1.6' }}>
-                            To obtain a token for accessing this application, please contact the owner via Discord (Username: <span style={{ color: '#7289DA', fontWeight: 'bold' }}>GalaxyKickLock</span>).
-                            <img src="/discord-icon.svg" alt="Discord Icon" style={{ width: '18px', height: '18px', marginLeft: '8px', verticalAlign: 'middle' }} />
+                            To get a token, contact the owner on Discord: <span style={{ color: '#7289DA', fontWeight: 'bold' }}>GalaxyKickLock</span> <MessageCircle size={18} style={{ marginLeft: '8px', verticalAlign: 'middle', color: '#7289DA' }} />
                         </p>
 
                         <div style={{ borderTop: '1px solid #333', paddingTop: '20px', marginTop: '20px' }}>
                             <h3 style={{ color: '#fff', marginBottom: '15px', fontSize: '1.4rem', display: 'flex', alignItems: 'center' }}>
-                                <DollarSign size={22} style={{ marginRight: '8px', color: '#22c55e' }} /> Token Pricing:
+                                <DollarSign size={22} style={{ marginRight: '8px', color: '#22c55e' }} /> Pricing:
                             </h3>
                             <ul style={{ listStyle: 'none', paddingLeft: '0', color: '#ccc', fontSize: '0.95rem' }}>
-                                <li style={{ marginBottom: '8px' }}><strong>1. 3-Month Subscription</strong> – 300 Fire Cannon Balls per token</li>
-                                <li style={{ marginBottom: '8px' }}><strong>2. 6-Month Subscription</strong> – 600 Fire Cannon Balls per token</li>
-                                <li style={{ marginBottom: '8px' }}><strong>3. 1-Year Subscription</strong> – 1200 Fire Cannon Balls per token</li>
+                                <li style={{ marginBottom: '8px' }}>✨ 3-Month: 300 Fire Cannon Balls</li>
+                                <li style={{ marginBottom: '8px' }}>🌟 6-Month: 600 Fire Cannon Balls</li>
+                                <li style={{ marginBottom: '8px' }}>💎 1-Year: 1200 Fire Cannon Balls</li>
                             </ul>
                             <p style={{ color: '#f39c12', fontSize: '0.85rem', fontStyle: 'italic', marginTop: '10px' }}>
-                                <strong>Note:</strong> Pricing is fixed and non-negotiable.
+                                ⚠️ Prices are fixed and non-negotiable.
                             </p>
                         </div>
 
                         <div style={{ borderTop: '1px solid #333', paddingTop: '20px', marginTop: '20px' }}>
                             <h3 style={{ color: '#fff', marginBottom: '15px', fontSize: '1.4rem', display: 'flex', alignItems: 'center' }}>
-                                <FileText size={22} style={{ marginRight: '8px', color: '#3498db' }} /> Terms & Conditions:
+                                <FileText size={22} style={{ marginRight: '8px', color: '#3498db' }} /> Terms:
                             </h3>
                             <ul style={{ listStyle: 'none', paddingLeft: '0', color: '#ccc', fontSize: '0.95rem' }}>
-                                <li style={{ marginBottom: '8px' }}>1. Token pricing may change based on application demand or usage trends.</li>
-                                <li style={{ marginBottom: '8px' }}>2. Tokens will be issued <em>only</em> upon successful transfer of Fire Cannon Balls to the owner's account.</li>
-                                <li style={{ marginBottom: '8px' }}>3. Customers will receive the latest application updates by default, subject to future changes.</li>
+                                <li style={{ marginBottom: '8px' }}>1. Prices may change based on demand.</li>
+                                <li style={{ marginBottom: '8px' }}>2. Tokens issued ONLY after successful payment.</li>
+                                <li style={{ marginBottom: '8px' }}>3. Latest app updates included by default.</li>
                             </ul>
                         </div>
                     </div>
