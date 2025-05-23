@@ -203,7 +203,7 @@ export default function SignUpPage() {
                         </h2>
 
                         <p style={{ color: '#ccc', marginBottom: '20px', fontSize: '1rem', lineHeight: '1.6' }}>
-                            To get a token, contact the owner on Discord: <span style={{ color: '#7289DA', fontWeight: 'bold' }}>GalaxyKickLock</span> <MessageCircle size={18} style={{ marginLeft: '8px', verticalAlign: 'middle', color: '#7289DA' }} />
+                            To get a token, contact the owner on Discord: <span style={{ color: '#7289DA', fontWeight: 'bold' }}>GalaxyKickLock</span>
                         </p>
 
                         <div style={{ borderTop: '1px solid #333', paddingTop: '20px', marginTop: '20px' }}>
@@ -227,7 +227,7 @@ export default function SignUpPage() {
                             <ul style={{ listStyle: 'none', paddingLeft: '0', color: '#ccc', fontSize: '0.95rem' }}>
                                 <li style={{ marginBottom: '8px' }}>1. Prices may change based on demand.</li>
                                 <li style={{ marginBottom: '8px' }}>2. Tokens issued ONLY after successful payment.</li>
-                                <li style={{ marginBottom: '8px' }}>3. Latest app updates included by default.</li>
+                                <li style={{ marginBottom: '8px' }}>3. Latest app updates included by default.* Subject to future change</li>
                             </ul>
                         </div>
                     </div>
